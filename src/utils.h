@@ -11,9 +11,6 @@
 #include <charconv>
 #include "highs/Highs.h"
 
-HighsModel construct_system(const std::vector<std::vector<double>>& constraints, const std::vector<std::tuple<double, double>>& bounds);
-HighsModel construct_system(const std::vector<double>& constraint, const std::tuple<double, double> bounds);
-
 struct Timer
 {
     std::chrono::steady_clock::time_point timerStart;
