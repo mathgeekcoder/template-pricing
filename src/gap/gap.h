@@ -3,6 +3,7 @@
 #include "parameters.h"
 #include "block/column_generation.h"
 #include "gap_compact.h"
+#include "gap/gap_instance.h"
 #include "quill/CsvWriter.h"
 #include "quill/core/FrontendOptions.h"
 #include "extern/scip/scip_knapsack.h"
@@ -53,8 +54,8 @@ struct TemplateFarkas {
     void init(Pricer& pricer, gap_compact& lp) {
         _instance = pricer._instance;
         _template.init(_instance->machines, _instance->jobs);
-        _mip.reset(new PricingBlockVector<GapPricingMIP>(instance->machines));
-        _mip->init(*instance);
+        _mip.reset(new PricingBlockVector<GapPricingMIP>(_instance->machines));
+        _mip->init(*_instance);
 
         const auto& solution = lp._solution;
 

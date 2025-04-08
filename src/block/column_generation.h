@@ -1,6 +1,8 @@
 #pragma once
 #include <vector>
 #include "utils.h"
+#include "highs/Highs.h"
+#include "highs/parallel/HighsParallel.h"
 
 // PricingBlockArray has a fixed number of blocks, and each block has a different pricing problem
 template <typename... Pricing>
