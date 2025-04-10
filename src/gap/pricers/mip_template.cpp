@@ -46,12 +46,12 @@ void GapPricingMIP::init(uint32_t index, const GapInstance& instance) {
 double GapPricingMIP::optimize_template(const std::vector<double>& template_obj, const std::vector<double>& duals, double offset) {
     // heuristic dual & template
     double tmp = optimize(duals, offset);
-    if (tmp <= 1e-3) {
+    if (tmp <= 1e-6) {
         return tmp;
     }
 
     highs->changeColsCost(0, _instance->jobs - 1, template_obj.data());
-    highs->changeRowBounds(1, -offset + 1e-3, kHighsInf);  // 1e-3 tol to avoid numerical issues
+	highs->changeRowBounds(1, -offset, kHighsInf);  // estimate good reduced costs
     highs->changeRowBounds(2, -_instance->jobs, kHighsInf);
 
     for (int j = 0; j < _instance->jobs; ++j)
@@ -67,6 +67,13 @@ double GapPricingMIP::optimize_template(const std::vector<double>& template_obj,
     HighsStatus status = highs->changeColsCost(0, _instance->jobs - 1, duals.data());
     highs->changeRowBounds(2, std::ceil(ht - 0.5), kHighsInf);
     status = highs->run();
+
+	// make sure we have good reduced costs
+	while (highs->getModelStatus() == HighsModelStatus::kOptimal && highs->getObjectiveValue() <= -offset + 1e-6) {
+        --ht;
+        highs->changeRowBounds(2, std::ceil(ht - 0.5), kHighsInf);
+        status = highs->run();
+    }
 
     solution.clear();
 
