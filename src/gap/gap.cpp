@@ -173,9 +173,11 @@ cg_time.start();
             _LB = std::max(_LB, _rmpLB - optimal_pricing);
 cg_time.pause();
 
-            double gap = (_UB - std::ceil(_LB - 1e-6)) / _UB;
+           // check if we can stop
+            double lb = std::ceil(_LB - 1e-6);
+            double gap = (_UB - lb) / _UB;
 
-            if (gap < params.gap || _LB + 1e-6 >= _rmpLB)
+            if (gap < params.gap || lb + 1e-6 >= _rmpLB)
                 break;
 
             // logging
@@ -193,8 +195,9 @@ cg_time.pause();
         updateCompactSolution();
     }
 
-    double gap = std::abs(100.0 * (_UB - std::ceil(_LB - 1e-6)) / _UB);
-    tbl.output(0, 0, iteration_count, _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count, prune_count, leaf_count);
+	double lb = std::ceil(_LB - 1e-6);
+    double gap = std::abs(100.0 * (_UB - lb) / _UB);
+    tbl.output(0, 0, iteration_count, lb, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count, prune_count, leaf_count);
     csv_writer.append_row(instance.name, pricer.name, 0, 0, iteration_count, _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", 1);
 
 	bool isOptimal = gap < params.gap;
