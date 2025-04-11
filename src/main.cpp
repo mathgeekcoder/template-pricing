@@ -36,9 +36,9 @@ int gap_wentges(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::Fro
 int gap_template(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer) {
     Parameters params;
     TemplatePrice pricer;
-	HeuristicTemplateFarkas pricer_farkas;
+    TemplateFarkas pricer_farkas;
     std::cout << std::endl << filename.filename().string() << " Template" << std::endl;
-	GapSolver(filename.string(), params, csv_writer).solve<TemplatePrice, HeuristicTemplateFarkas>(pricer, pricer_farkas);
+	GapSolver(filename.string(), params, csv_writer).solve<TemplatePrice, TemplateFarkas>(pricer, pricer_farkas);
 
  //   std::cout << std::endl << filename.filename().string() << " FixedTemplate" << std::endl;
  //   FixedTemplatePrice fixed_pricer;
