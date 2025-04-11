@@ -50,8 +50,9 @@ double GapPricingMIP::optimize_template(const std::vector<double>& template_obj,
         return tmp;
     }
 
+    highs->changeObjectiveOffset(0);
     highs->changeColsCost(0, _instance->jobs - 1, template_obj.data());
-	highs->changeRowBounds(1, -offset, kHighsInf);  // estimate good reduced costs
+	highs->changeRowBounds(1, -offset, kHighsInf);
     highs->changeRowBounds(2, -_instance->jobs, kHighsInf);
 
     for (int j = 0; j < _instance->jobs; ++j)
@@ -66,10 +67,11 @@ double GapPricingMIP::optimize_template(const std::vector<double>& template_obj,
     // switch objective, add new constraint
     HighsStatus status = highs->changeColsCost(0, _instance->jobs - 1, duals.data());
     highs->changeRowBounds(2, std::ceil(ht - 0.5), kHighsInf);
-    status = highs->run();
+    highs->changeObjectiveOffset(offset);
+    status = highs->run();    
 
 	// make sure we have good reduced costs
-	while (highs->getModelStatus() == HighsModelStatus::kOptimal && highs->getObjectiveValue() <= -offset + 1e-6) {
+	while (highs->getModelStatus() != HighsModelStatus::kOptimal || highs->getObjectiveValue() <= 1e-6) {
         --ht;
         highs->changeRowBounds(2, std::ceil(ht - 0.5), kHighsInf);
         status = highs->run();

@@ -10,24 +10,23 @@
 #include "quill/bundled/fmt/format.h"
 
 // Supported template instantiations
-template void GapSolver::solve(TemplatePrice& pricer, HeuristicTemplateFarkas& pricer_farkas);
+template void GapSolver::solve(TemplatePrice& pricer, TemplateFarkas& pricer_farkas);
 template void GapSolver::solve(FixedTemplatePrice& pricer, FixedTemplateFarkas& pricer_farkas);
 template void GapSolver::solve(DantzigPrice& pricer, DantzigFarkas& pricer_farkas);
 template void GapSolver::solve(WentgesPrice& pricer, DantzigFarkas& pricer_farkas);
 template void GapSolver::solve(WentgesTemplatePrice& pricer, WentgesTemplateFarkas& pricer_farkas);
-template void GapSolver::solve(WentgesTemplatePrice& pricer, HeuristicTemplateFarkas& pricer_farkas);
+template void GapSolver::solve(WentgesTemplatePrice& pricer, TemplateFarkas& pricer_farkas);
 
 template bool GapSolver::restoreFeasibility(DantzigFarkas& pricer_farkas);
-template bool GapSolver::restoreFeasibility(HeuristicTemplateFarkas& pricer_farkas);
+template bool GapSolver::restoreFeasibility(TemplateFarkas& pricer_farkas);
 
 double remove_duplicates(GapInstance& instance, Highs* rmp);
 bool add_columns(Highs* rmp, GapInstance& instance, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs, std::vector<double>& ones);
 
 template <>
-void HeuristicTemplateFarkas::init<FixedTemplatePrice>(FixedTemplatePrice& pricer, gap_compact& lp) {
+void TemplateFarkas::init<FixedTemplatePrice>(FixedTemplatePrice& pricer, gap_compact& lp) {
     _instance = pricer._instance;
     _template = pricer._template;
-    dual_values = lp._solution.row_dual;
 }
 
 void DualColumnManagement::reduce(size_t iteration_count) {
