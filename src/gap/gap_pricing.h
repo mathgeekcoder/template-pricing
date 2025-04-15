@@ -1,9 +1,9 @@
 #pragma once
 #include "gap_instance.h"
-#include "extern/scip/scip_knapsack.h"
 #include "block/column_generation.h"
 #include "highs/Highs.h"
 #include "highs/parallel/HighsParallel.h"
+#include "extern/scip/scip_knapsack.h"
 
 struct GapPricing {
     size_t _machine = 0;
@@ -17,12 +17,13 @@ struct GapPricing {
     }
 
     double optimize(const std::vector<double>& obj, double offset) {
-        double scip_opt;
+        double opt;
+
         int solution_size = 0;
         solution.resize(_instance->jobs);
-        SCIPsolveKnapsackExactly(_instance->jobs, _instance->demands[_machine].data(), obj.data(), _instance->capacity[_machine], solution.data(), &solution_size, &scip_opt);
+        SCIPsolveKnapsackExactly(_instance->jobs, _instance->demands[_machine].data(), obj.data(), _instance->capacity[_machine], solution.data(), &solution_size, &opt);
         solution.resize(solution_size);
 
-        return scip_opt + offset;
+        return opt + offset;
     }
 };

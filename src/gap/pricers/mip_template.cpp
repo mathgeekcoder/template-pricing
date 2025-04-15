@@ -70,12 +70,17 @@ double GapPricingMIP::optimize_template(const std::vector<double>& template_obj,
     highs->changeObjectiveOffset(offset);
     status = highs->run();    
 
-	// make sure we have good reduced costs
-	while (highs->getModelStatus() != HighsModelStatus::kOptimal || highs->getObjectiveValue() <= 1e-6) {
+	// ensure good reduced costs, prevent infinite loop
+	while (ht > -_instance->jobs && highs->getObjectiveValue() <= 1e-6) {
         --ht;
         highs->changeRowBounds(2, std::ceil(ht - 0.5), kHighsInf);
         status = highs->run();
     }
+
+    if (ht <= -_instance->jobs) {
+        std::cout << "Error in Pricing MIP: could not find good reduced cost" << std::endl;
+        return tmp; // return standard pricing solution
+	}
 
     solution.clear();
 
