@@ -24,7 +24,7 @@ double WentgesTemplatePrice::optimize(const std::vector<double>& duals, PricingB
 
             pricing[m].solution.push_back(_instance->jobs + m);
         }
-    });
+    }, std::max(1, int(2 * _instance->machines / std::thread::hardware_concurrency())));
 
     double optimal_pricing = 0.0;
 

@@ -38,7 +38,6 @@ struct WentgesPrice {
         if (_rmp->getObjectiveValue() < best_reduced_cost) {
             best_reduced_cost = _rmp->getObjectiveValue();
             stabilized_duals_for_pricing_old_columns = stabilized_duals_for_pricing;
-            //alpha = 0.9;
         }
     }
 

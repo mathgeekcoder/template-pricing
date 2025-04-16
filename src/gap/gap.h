@@ -115,13 +115,10 @@ struct FixedTemplateFarkas {
 
 struct DantzigFarkas {
     GapInstance* _instance = nullptr;
-    Highs* _rmp = nullptr;
-    TemplatePricing _template; // not used, but compile hack for now
 
     template <typename Pricer>
     void init(Pricer& pricer, gap_compact& lp) {
         _instance = pricer._instance;
-        _template.init(_instance->machines, _instance->jobs);
     }
 
     double optimize(const std::vector<double>& duals, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs) {
@@ -138,7 +135,6 @@ struct DantzigFarkas {
 
 struct WentgesTemplateFarkas {
     GapInstance* _instance = nullptr;
-    Highs* _rmp = nullptr;
 	WentgesTemplatePrice _template;
 
     template <typename Pricer>

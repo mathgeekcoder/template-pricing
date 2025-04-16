@@ -153,8 +153,6 @@ rmp_time.start();
             _rmpLB = rmp->getObjectiveValue();
             auto& solution = rmp->getSolution();
 
-            double lambda_change = std::accumulate(solution.col_value.begin() + new_columns_index, solution.col_value.end(), 0.0);
-
             updateCompactSolution();
             lp_iteration_count += get_lp_iters();
 rmp_time.pause();
@@ -181,7 +179,7 @@ cg_time.pause();
                 break;
 
             // logging
-            csv_writer.append_row(instance.name, pricer.name, 0, 0, iteration_count, _LB, _UB, gap * 100, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, lambda_change, 0);
+            csv_writer.append_row(instance.name, pricer.name, 0, 0, iteration_count, _LB, _UB, gap * 100, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", 0);
 
             if (iteration_count % ITERATION_OUTPUT == 0 && total_time.TotalSeconds() - previous_logging_time > ITERATION_TIME) {
                 tbl.output(0, 0, iteration_count, _LB, _UB, gap * 100, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count, prune_count, leaf_count);
@@ -525,7 +523,7 @@ bool GapSolver::restoreFeasibility(FarkasPricerType &pricer_farkas) {
     // tight loop to restore feasibility (assuming possible!)
     do {
 rmp_time.start();
-        rmp->clearSolver();
+        //rmp->clearSolver();
         auto status = rmp->run();
 
         // HiGHs has gotten into a bad state, so we need to reset?
