@@ -59,6 +59,7 @@ int main(int argc, char* argv[])
         return 0;
     }
 
+    HandleCtrlC::Enable();
     std::vector<fs::path> filePaths;
 
     if (fs::is_directory(argv[1])) {

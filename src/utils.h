@@ -10,6 +10,7 @@
 #include <string_view>
 #include <charconv>
 #include "highs/Highs.h"
+#include <mutex>
 
 struct Timer
 {
@@ -476,3 +477,35 @@ T sum(const Container& container, T init, Lookup& op) {
         return acc + op[elem];
     });
 }
+
+
+// Support for Ctrl-C signal handling
+struct HandleCtrlC {
+    static std::vector<std::function<void()>*> handlers; // static vector to store handlers
+    static std::mutex handlers_mutex;                    // mutex for thread-safety
+
+    HandleCtrlC(std::function<void()> cb) {
+		callback = cb; // store the callback
+        std::lock_guard<std::mutex> lock(handlers_mutex);
+        handlers.push_back(&callback);
+    }
+
+    ~HandleCtrlC() {
+        std::lock_guard<std::mutex> lock(handlers_mutex);
+        handlers.erase(std::remove(handlers.begin(), handlers.end(), &callback), handlers.end());
+    }
+
+    static void call_all_handlers() {
+        std::lock_guard<std::mutex> lock(handlers_mutex);
+        for (const auto& handler : handlers) {
+            (*handler)();
+        }
+    }
+
+    static bool Enable();
+    static void Disable();
+
+private:
+    std::function<void()> callback; // instance-specific callback
+};
+

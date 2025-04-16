@@ -8,6 +8,7 @@
 #include "gap_instance.h"
 #include <filesystem>
 #include "quill/bundled/fmt/format.h"
+#include "utils.h"
 
 // Supported template instantiations
 template void GapSolver::solve(TemplatePrice& pricer, TemplateFarkas& pricer_farkas);
@@ -103,6 +104,12 @@ void GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
 		return;
 	}
 
+    bool should_stop = false;
+    HandleCtrlC ctrl_c_handler([&]() { 
+		std::cout << fmtquill::format("{} {}: Ctrl-C pressed, stopping...\n", instance.name, pricer.name);
+        should_stop = true; 
+    });
+
     rmp.reset(new Highs);
     rmp->setOptionValue("output_flag", false);
     rmp->setOptionValue(kPresolveString, "off");
@@ -188,7 +195,7 @@ cg_time.pause();
 
             ++iteration_count;
 
-        } while (any && (params.timeout < 0 || total_time.TotalSeconds() < params.timeout));
+        } while (any && (params.timeout < 0 || total_time.TotalSeconds() < params.timeout) && !should_stop);
 
         updateCompactSolution();
     }
