@@ -14,4 +14,4 @@ add_executable(${PROJECT_NAME} ${INCLUDE_FILES} ${SOURCE_FILES})
 target_link_libraries(${PROJECT_NAME} highs::highs)
 target_include_directories(${PROJECT_NAME} PUBLIC src)
 
-set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 17)
+set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 20)

@@ -22,12 +22,14 @@ double WentgesPrice::optimize(const std::vector<double>& dual_out, PricingBlockV
     if (optimal_pricing < 1e-6)
         return optimal_pricing;
 
-    for (int k = 1; ; ++k) {
+    int k = 1;
+
+    while (true) {
         if (k > 1) {
             ++mis_price;
         }
 
-        double alpha_tilde = std::max(0.0, 1 - k * (1 - alpha));
+        double alpha_tilde = (k < 10 && alpha > 1e-3) ? std::max(0.0, 1 - k * (1 - alpha)) : 0;
         double beta = 0;
 
         // stabilize duals for pricing
@@ -76,11 +78,11 @@ double WentgesPrice::optimize(const std::vector<double>& dual_out, PricingBlockV
 
         // optimal pricing for bounds
         highs::parallel::for_each(0, _instance->machines, [&](HighsInt start, HighsInt end) {
-            std::vector<double> obj = dual_sep;
+            std::vector<double> obj(_instance->jobs);
 
             for (int m = start; m < end; ++m) {
                 for (int j = 0; j < _instance->jobs; ++j) {
-                    obj[j] -= _instance->profit[m][j];
+                    obj[j] = dual_sep[j] - _instance->profit[m][j];
                 }
 
                 pricing[m].optimize(obj, dual_sep[_instance->jobs + m]);
@@ -92,7 +94,7 @@ double WentgesPrice::optimize(const std::vector<double>& dual_out, PricingBlockV
 
                 pricing[m].solution.push_back(_instance->jobs + m);
             }
-        });
+        }, std::max(1, int(2 * _instance->machines / std::thread::hardware_concurrency())));
 
         bool any = false;
 
@@ -103,31 +105,30 @@ double WentgesPrice::optimize(const std::vector<double>& dual_out, PricingBlockV
         if (any == true || (alpha_tilde == 0.0 && beta == 0.0)) {
             break;
         }
-    }
 
-    // Update subgradient and alpha
-    std::vector<int> job_count(_instance->jobs + _instance->machines, 0);
-    for (int m = 0; m < _instance->machines; ++m) {
-        if (reduced_costs[m] > 1e-6) {
-            for (int j : pricing[m].solution) {
-                ++job_count[j];
-            }
-        }
+        ++k;
     }
 
     // Compute subgradient at separation point
-    // even though RMP is a cover (assumed here), we want to find the subgradient assuming a partition
-    for (int j = 0; j < _instance->jobs; ++j) {
-        g_sep[j] = job_count[j] - 1; // violated job constraint
+    // even if RMP is a cover on jobs, we want to find the subgradient for a partition
+	std::fill(g_sep.begin(), g_sep.begin() + _instance->jobs, -1);
+
+    for (int m = 0; m < _instance->machines; ++m) {
+        for (int j : pricing[m].solution) {
+            ++g_sep[j];
+        }
     }
 
-    // Adjust alpha
-    double v = 0;
-    for (int row = _rmp->getNumRow() - 1; row >= 0; --row) {
-        v += g_sep[row] * (dual_out[row] - dual_in[row]);
-    }
+	// Only adjust alpha if no mispricing
+    if (k == 1) {
+        double v = 0;
+        for (int j = 0; j < _instance->jobs; ++j) {
+            v += g_sep[j] * (dual_out[j] - dual_in[j]);
+        }
 
-    alpha = v > 0 ? std::min(0.99, alpha + (1.0 - alpha) * 0.1) : std::max(0.0, alpha - 0.1);
+        // alpha in [0, 1)
+        alpha = v > 0 ? std::min(1.0 - 1e-4, alpha + (1.0 - alpha) * 0.1) : std::max(0.0, alpha - 0.1);
+    }
 
     return optimal_pricing;
 }

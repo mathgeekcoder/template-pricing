@@ -25,7 +25,7 @@ double remove_duplicates(GapInstance& instance, Highs* rmp);
 bool add_columns(Highs* rmp, GapInstance& instance, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs, std::vector<double>& ones);
 
 template <>
-void TemplateFarkas::init<FixedTemplatePrice>(FixedTemplatePrice& pricer, gap_compact& lp) {
+void TemplateFarkas::init<FixedTemplatePrice>(FixedTemplatePrice& pricer, PricingBlockVector<GapPricing>& pricing, gap_compact& lp) {
     _instance = pricer._instance;
     _template = pricer._template;
 }
@@ -122,7 +122,7 @@ void GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
 
     // initialize pricing
     pricing.init(instance);
-    pricer_farkas.init(pricer, lp);
+    pricer_farkas.init(pricer, pricing, lp);
 
     double optimal_pricing = 0.0;
     bool any = false;

@@ -10,6 +10,7 @@
 #include "gap/gap.h"
 #include "quill/Backend.h"
 
+#define RUN_PARALLEL
 namespace fs = std::filesystem;
 
 int gap_dantzig(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer) {
@@ -37,7 +38,7 @@ int gap_template(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::Fr
     Parameters params;
     TemplatePrice pricer;
     TemplateFarkas pricer_farkas;
-    std::cout << std::endl << filename.filename().string() << " Template" << std::endl;
+    std::cout << std::endl << filename.filename().string() << " MipTemplate" << std::endl;
 	GapSolver(filename.string(), params, csv_writer).solve<TemplatePrice, TemplateFarkas>(pricer, pricer_farkas);
 
  //   std::cout << std::endl << filename.filename().string() << " FixedTemplate" << std::endl;
@@ -96,7 +97,7 @@ int main(int argc, char* argv[])
 	highs::parallel::initialize_scheduler(std::thread::hardware_concurrency());
 #endif
 
-    std::string pricing_method = "template";
+    std::string pricing_method = "mip_template";
     if (argc > 2)
         pricing_method = argv[2];
 
@@ -105,18 +106,27 @@ int main(int argc, char* argv[])
 
     fs::path current_path(argv[1]);
 
-    for (const fs::path& filename : filePaths) {
-        quill::CsvWriter<CsvSchema, quill::FrontendOptions> csv_writer(filename.filename().string() + "-" + pricing_method + "-output.csv");
+#ifdef RUN_PARALLEL
+    highs::parallel::for_each(0, filePaths.size(), [&](HighsInt start, HighsInt end) {
+		for (int i = start; i < end; ++i) {
+			const fs::path& filename = filePaths[i];
+#else
+        for (const fs::path& filename : filePaths) {
+#endif
+            quill::CsvWriter<CsvSchema, quill::FrontendOptions> csv_writer(filename.filename().string() + "-" + pricing_method + "-output.csv");
 
-        if (pricing_method == "template")
-            gap_template(filename, csv_writer);
-        else if (pricing_method == "dantzig")
-            gap_dantzig(filename, csv_writer);
-        else if (pricing_method == "wentges_template")
-            gap_wentges_template(filename, csv_writer);
-        else if (pricing_method == "wentges")
-            gap_wentges(filename, csv_writer);
-    }
+            if (pricing_method == "mip_template")
+                gap_template(filename, csv_writer);
+            else if (pricing_method == "dantzig")
+                gap_dantzig(filename, csv_writer);
+            else if (pricing_method == "wentges_template")
+                gap_wentges_template(filename, csv_writer);
+            else if (pricing_method == "wentges")
+                gap_wentges(filename, csv_writer);
+        }
+#ifdef RUN_PARALLEL
+    });
+#endif
 
     return 0;
 }

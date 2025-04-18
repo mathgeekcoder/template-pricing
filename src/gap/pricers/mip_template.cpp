@@ -116,9 +116,9 @@ void TemplatePrice::init(Highs* rmp, GapInstance* instance) {
 
 double TemplatePrice::optimize(const std::vector<double>& duals, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs) {
     highs::parallel::for_each(0, _instance->machines, [&](HighsInt start, HighsInt end) {
-        for (int m = start; m < end; ++m) {
-            std::vector<double> obj(_instance->jobs);
+        std::vector<double> obj(_instance->jobs);
 
+        for (int m = start; m < end; ++m) {
             for (int j = 0; j < _instance->jobs; ++j) {
                 obj[j] = duals[j] - _instance->profit[m][j];
             }

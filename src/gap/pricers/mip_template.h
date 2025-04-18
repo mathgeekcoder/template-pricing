@@ -16,7 +16,7 @@ struct GapPricingMIP : public GapPricing {
 // Template-based MIP pricing
 //
 struct TemplatePrice {
-    static constexpr const char* name = "Template";
+    static constexpr const char* name = "MipTemplate";
 
     Highs* _rmp = nullptr;
     GapInstance* _instance = nullptr;

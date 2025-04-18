@@ -1,6 +1,6 @@
 // wentges logic adapted from:
 // 
-// A Pessoa, R Sadykov, E Uchoa, F Vanderbeck. https://inria.hal.science/hal-01077984v1
+// A Pessoa, R Sadykov, E Uchoa, F Vanderbeck. https://inria.hal.science/hal-01077984v4/document
 // Automation and combination of linear - programming based stabilization techniques in column generation. 2014.
 #pragma once
 #include "gap/gap_pricing.h"

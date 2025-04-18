@@ -51,7 +51,7 @@ struct TemplateFarkas {
     std::unique_ptr<PricingBlockVector<GapPricingMIP>> _mip;
 
     template <typename Pricer>
-    void init(Pricer& pricer, gap_compact& lp) {
+    void init(Pricer& pricer, PricingBlockVector<GapPricing>& pricing, gap_compact& lp) {
         _instance = pricer._instance;
         _template.init(_instance->machines, _instance->jobs);
         _mip.reset(new PricingBlockVector<GapPricingMIP>(_instance->machines));
@@ -86,7 +86,7 @@ struct FixedTemplateFarkas {
     std::unique_ptr<PricingBlockVector<GapPricingMIP>> _mip;
 
     template <typename Pricer>
-    void init(Pricer& pricer, gap_compact& lp) {
+    void init(Pricer& pricer, PricingBlockVector<GapPricing>& pricing, gap_compact& lp) {
         _instance = pricer._instance;
         _mip.reset(new PricingBlockVector<GapPricingMIP>(_instance->machines));
         _mip->init(*_instance);
@@ -115,16 +115,57 @@ struct FixedTemplateFarkas {
 
 struct DantzigFarkas {
     GapInstance* _instance = nullptr;
+    double scale_profits = 0;
+    double scale_perturb = 0;
 
     template <typename Pricer>
-    void init(Pricer& pricer, gap_compact& lp) {
+    void init(Pricer& pricer, PricingBlockVector<GapPricing>& pricing, gap_compact& lp) {
         _instance = pricer._instance;
+
+		// get maximum profit value for scaling
+		for (const auto machine_profits : _instance->profit) {
+			double max_profit = *std::max_element(machine_profits.begin(), machine_profits.end());
+			scale_profits = std::max(scale_profits, max_profit);
+		}
+
+        scale_profits = scale_profits > 0 ? (1 - 1e-6) / scale_profits : 0;
+
+        // get maximum number of jobs allocated to one machine (for scaling)
+        std::vector<double> ones(_instance->jobs, 1.0);
+
+        for (int m = 0; m < _instance->machines; ++m) {
+            scale_perturb = std::max(scale_perturb, pricing[m].optimize(ones, 0));
+        }
+
+		scale_perturb = scale_perturb > 0 ? (1 - 1e-6) / scale_perturb : 0;
     }
 
     double optimize(const std::vector<double>& duals, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs) {
+		// the duals (from extreme ray) can be sparse, which leads to volatile results
+        // want to perturb with "small enough" values to improve convergence
+        
+		// find smallest non-zero value
+		double min_val = kHighsInf;
+
+        for (int j = 0; j < _instance->jobs; ++j) {
+			auto value = std::abs(duals[j]);
+			if (value > 0 && value < min_val) {
+                min_val = value;
+			}
+        }
+
+        // want to add small enough values so that sum(perturbations) < min_val
+		double perturbation = scale_perturb * min_val;
+
         highs::parallel::for_each(0, _instance->machines, [&](HighsInt start, HighsInt end) {
+			std::vector<double> obj(_instance->jobs);
+
             for (int m = start; m < end; ++m) {
-                reduced_costs[m] = pricing[m].optimize(duals, duals[_instance->jobs + m]);
+				for (int j = 0; j < _instance->jobs; ++j) {
+					obj[j] = duals[j] + perturbation * (1 - scale_profits * _instance->profit[m][j]);
+				}
+  
+                reduced_costs[m] = pricing[m].optimize(obj, duals[_instance->jobs + m]);
                 pricing[m].solution.push_back(_instance->jobs + m);
             }
         });
@@ -138,7 +179,7 @@ struct WentgesTemplateFarkas {
 	WentgesTemplatePrice _template;
 
     template <typename Pricer>
-    void init(Pricer& pricer, gap_compact& lp) {
+    void init(Pricer& pricer, PricingBlockVector<GapPricing>& pricing, gap_compact& lp) {
         _instance = pricer._instance;
         _template.init(pricer._rmp, _instance);
 
