@@ -106,6 +106,8 @@ void GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
 
     bool should_stop = false;
     HandleCtrlC ctrl_c_handler([&]() { 
+		if (should_stop) exit(-1);  // force stop
+
 		std::cout << fmtquill::format("{} {}: Ctrl-C pressed, stopping...\n", instance.name, pricer.name);
         should_stop = true; 
     });
