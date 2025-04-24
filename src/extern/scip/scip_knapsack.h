@@ -86,5 +86,19 @@ bool SCIPsolveKnapsackExactly(
     uint32_t capacity,      /**< capacity of knapsack */
     int* solitems,          /**< array to store items in solution */
     int* nsolitems,         /**< pointer to store number of items in solution */
-    double* solval          /**< pointer to store optimal solution value */
+    double* solval,          /**< pointer to store optimal solution value */
+    std::vector<double>& optvalues
 );
+
+static inline bool SCIPsolveKnapsackExactly(
+    int nitems,             /**< number of available items */
+    const int* weights,     /**< item weights */
+    const double* profits,  /**< item profits */
+    uint32_t capacity,      /**< capacity of knapsack */
+    int* solitems,          /**< array to store items in solution */
+    int* nsolitems,         /**< pointer to store number of items in solution */
+    double* solval          /**< pointer to store optimal solution value */
+) {
+    std::vector<double> optvalues;
+	return SCIPsolveKnapsackExactly(nitems, weights, profits, capacity, solitems, nsolitems, solval, optvalues);
+}
