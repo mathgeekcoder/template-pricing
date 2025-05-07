@@ -2,6 +2,7 @@
 #include "gap_instance.h"
 #include <iomanip>
 #include "highs/Highs.h"
+#include <ctime>
 
 struct gap_compact {
 	GapInstance& _instance;
@@ -14,8 +15,9 @@ public:
 		highs = std::make_unique<Highs>();
 	}
 
-	double solve()
-	{
+	double solve() {
+		// randomize compact model to help avoid infrequent HiGHS RMP error with CG
+		highs->setOptionValue("random_seed", static_cast<int>(std::time(nullptr)));
 		highs->setOptionValue("output_flag", "false");
 		highs->passModel(create_model());
 		highs->run();

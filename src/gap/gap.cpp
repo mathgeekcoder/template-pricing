@@ -4,6 +4,7 @@
 #include "block/column_generation.h"
 #include "highs/util/HighsIntegers.h"
 #include <numeric>
+#include <ctime>
 
 #include "gap_instance.h"
 #include <filesystem>
@@ -110,6 +111,7 @@ void GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
 
     rmp.reset(new Highs);
     rmp->setOptionValue("output_flag", false);
+    rmp->setOptionValue("random_seed", static_cast<int>(std::time(nullptr)));
     rmp->setOptionValue(kPresolveString, "off");
     std::function<HighsInt()> get_lp_iters = [&]() { return rmp->getInfo().simplex_iteration_count; };
 
