@@ -10,7 +10,7 @@
 #include "gap/gap.h"
 #include "quill/Backend.h"
 
-#define RUN_PARALLEL
+//#define RUN_PARALLEL
 namespace fs = std::filesystem;
 
 int gap_dantzig(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer) {

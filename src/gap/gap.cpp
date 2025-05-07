@@ -31,46 +31,42 @@ void TemplateFarkas::init<FixedTemplatePrice>(FixedTemplatePrice& pricer, Pricin
 }
 
 void DualColumnManagement::reduce(size_t iteration_count) {
-    const int PREVIOUS_FACTOR = 3; // at least x basis kept columns should be those generated in the "last iterations"
-    const int MAX_FACTOR = 6;
-	const int MIN_COL_REDUCE = 8000;
-    const int MIN_REMAINING = 4000;
+    const int MIN_COLS = 2 * _rmp->getNumRow();
+    const int MAX_COLS = 3 * _rmp->getNumRow();
 
-    if (_rmp->getNumCol() > MIN_COL_REDUCE && _rmp->getNumCol() > MAX_FACTOR * _rmp->getNumRow()) {
-        std::vector<double> reduced_costs(_rmp->getNumCol(), 0);
+    // we add at most # machines per iteration, so there is at least # rows / # machines iterations before we can remove a column
+    const int AGE_THRESHOLD = std::max(5, _rmp->getNumRow() / _instance->machines);
 
-        auto& solution = _rmp->getSolution();
-        calculate_reduced_costs(*_rmp, solution.row_dual, reduced_costs);
+	// age the columns, i.e., set the current basis to the current iteration
+    const HighsInt* basis = _rmp->getBasicVariablesArray();
+    const HighsInt num_col = _rmp->getNumCol();
 
-        const HighsInt* basis = _rmp->getBasicVariablesArray();
-        const HighsInt num_col = _rmp->getNumCol();
+	_age.resize(num_col, iteration_count - 1);
 
-        for (int i = _rmp->getNumRow() - 1; i >= 0; --i) {
-            if (basis[i] < num_col) {
-                reduced_costs[basis[i]] = kHighsInf;
+    for (int i = _rmp->getNumRow() - 1; i >= 0; --i) {
+        if (basis[i] < num_col) {
+            _age[basis[i]] = iteration_count;
+        }
+    }
+
+	// remove old columns if we've got too many
+    if (num_col > MAX_COLS && iteration_count > AGE_THRESHOLD) {
+        std::vector<int> indices_to_remove;
+        int can_remove = num_col - MIN_COLS;
+
+		// columns with earlier index are likely older, so if we hit the `can_remove` limit, 
+        // we stop but are likely to remove the older ones anyhow
+		for (int i = 0; i < num_col && indices_to_remove.size() < can_remove; ++i) {
+            if (_age[i] < iteration_count - AGE_THRESHOLD) {
+                indices_to_remove.emplace_back(i);
             }
-        }
+		}
 
-        // sort by reduced cost, take lowest values such that remaining # cols = 3 * # rows
-        std::vector<int> sorted_indices(_rmp->getNumCol());
-        std::iota(sorted_indices.begin(), sorted_indices.end(), 0);
-        std::stable_sort(sorted_indices.begin(), sorted_indices.end(), [&](int a, int b) { return reduced_costs[a] < reduced_costs[b]; });
-
-        // remove basis columns (at the end of the sorted list)
-        int keep = std::max(MIN_REMAINING, PREVIOUS_FACTOR * _rmp->getNumRow());
-        int size_to_remove = std::max(0, int(sorted_indices.size()) - 1 - keep);
-
-        // shouldn't happen, but just in case - don't remove the basis columns
-        while (size_to_remove > 0 && reduced_costs[sorted_indices[size_to_remove]] == kHighsInf) {
-            --size_to_remove;
-        }
-
-        // want to keep PREVIOUS_FACTOR * # rows columns, i.e., remove the rest
-		sorted_indices.resize(size_to_remove);
-        std::sort(sorted_indices.begin(), sorted_indices.end());
-
-        // remove the columns!
-        _rmp->deleteCols(sorted_indices.size(), sorted_indices.data());
+        // remove the columns from model and from _age
+		for (int i = indices_to_remove.size() - 1; i >= 0; --i) {
+			_age.erase(_age.begin() + indices_to_remove[i]);
+    	}
+        _rmp->deleteCols(indices_to_remove.size(), indices_to_remove.data());
     }
 }
 
@@ -135,7 +131,6 @@ cg_time.start();
 cg_time.pause();
 
     restoreFeasibility(pricer_farkas);
-    pricer.init_feasible();
 
     double _rmpLB = rmp->getObjectiveValue();
     updateCompactSolution();
@@ -145,6 +140,9 @@ cg_time.pause();
     // primal simplex for warm-start "add columns"
     rmp->setOptionValue("simplex_strategy", "4");
     rmp->setOptionValue("allow_unbounded_or_infeasible", false);  // not sure if this adds unnecessary overheads
+    //rmp->setOptionValue(kSolverString, kIpmString);
+    //rmp->setOptionValue(kRunCrossoverString, kHighsOffString);
+    pricer.init_feasible();
 
     int new_columns_index = rmp->getNumCol();
     size_t node_count = 0;

@@ -22,23 +22,12 @@ struct CsvSchema {
 struct DualColumnManagement {
     Highs* _rmp = nullptr;
     GapInstance* _instance = nullptr;
+    std::vector<uint16_t> _age;
 
     void init(Highs* rmp, GapInstance* instance) {
         _rmp = rmp;
         _instance = instance;
-    }
-
-    void calculate_reduced_costs(Highs& h, const std::vector<double>& duals, std::vector<double>& reduced_costs) {
-        auto& lp = h.getLp();
-        assert(lp.a_matrix_.isColwise() == true);
-
-        for (int i = 0; i < lp.num_col_; ++i) {
-            for (int el = lp.a_matrix_.start_[i]; el < lp.a_matrix_.start_[i + 1]; ++el) {
-                reduced_costs[i] += lp.a_matrix_.value_[el] * duals[lp.a_matrix_.index_[el]];
-            }
-
-            reduced_costs[i] -= lp.col_cost_[i];
-        }
+		_age.resize(_rmp->getNumCol(), 0);
     }
 
     void reduce(size_t iteration_count);
