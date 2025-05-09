@@ -9,48 +9,17 @@
 #include "parameters.h"
 #include "gap/gap.h"
 #include "quill/Backend.h"
+#include <ctime>
 
 //#define RUN_PARALLEL
 namespace fs = std::filesystem;
 
-int gap_dantzig(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer) {
-    Parameters params;
-    std::cout << std::endl << filename.filename().string() << " Dantzig" << std::endl;
-	GapSolver(filename.string(), params, csv_writer).solve<DantzigPrice, DantzigFarkas>();
-    return 0;
+template <typename Pricer, typename PricerFarkas>
+int run_gap(const Parameters& params, const fs::path& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer) {
+    std::cout << filename.filename().string() << " " + std::string(Pricer::name) << std::endl;
+    return GapSolver(filename.string(), params, csv_writer).solve<Pricer, PricerFarkas>();
 }
 
-int gap_wentges_template(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer) {
-    Parameters params;
-    std::cout << std::endl << filename.filename().string() << " WentgesTemplate" << std::endl;
-    GapSolver(filename.string(), params, csv_writer).solve<WentgesTemplatePrice, WentgesTemplateFarkas>();
-    return 0;
-}
-
-int gap_wentges(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer) {
-    Parameters params;
-    std::cout << std::endl << filename.filename().string() << " Wentges" << std::endl;
-    GapSolver(filename.string(), params, csv_writer).solve<WentgesPrice, DantzigFarkas>();
-    return 0;
-}
-
-int gap_template(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer) {
-    Parameters params;
-    TemplatePrice pricer;
-    TemplateFarkas pricer_farkas;
-    std::cout << std::endl << filename.filename().string() << " MipTemplate" << std::endl;
-	GapSolver(filename.string(), params, csv_writer).solve<TemplatePrice, TemplateFarkas>(pricer, pricer_farkas);
-
- //   std::cout << std::endl << filename.filename().string() << " FixedTemplate" << std::endl;
- //   FixedTemplatePrice fixed_pricer;
- //   fixed_pricer._template = pricer._template;
-
- //   FixedTemplateFarkas fixed_farkas;
-	//fixed_farkas._template = pricer._template;
-
- //   GapSolver(filename.string(), params, csv_writer).solve<FixedTemplatePrice, FixedTemplateFarkas>(fixed_pricer, fixed_farkas);
-    return 0;
-}
 
 // An example of reoptimization within a branch-and-price framework.
 int main(int argc, char* argv[])
@@ -91,7 +60,7 @@ int main(int argc, char* argv[])
 
     std::sort(filePaths.begin(), filePaths.end());
 
-#ifdef _DEBUG
+#ifndef NDEBUG
     highs::parallel::initialize_scheduler(1);
 #else
 	highs::parallel::initialize_scheduler(std::thread::hardware_concurrency());
@@ -100,6 +69,10 @@ int main(int argc, char* argv[])
     std::string pricing_method = "mip_template";
     if (argc > 2)
         pricing_method = argv[2];
+
+	int REPLICATIONS = 1;
+	if (argc > 3)
+        REPLICATIONS = std::max(1, std::stoi(argv[3]));
 
     quill::BackendOptions backend_options;
     quill::Backend::start(backend_options);
@@ -113,16 +86,28 @@ int main(int argc, char* argv[])
 #else
         for (const fs::path& filename : filePaths) {
 #endif
-            quill::CsvWriter<CsvSchema, quill::FrontendOptions> csv_writer(filename.filename().string() + "-" + pricing_method + "-output.csv");
+            for (int replication = 1; replication <= REPLICATIONS; ++replication) {
+                std::cout << std::endl << "Replication: " << replication << std::endl;
+                quill::CsvWriter<CsvSchema, quill::FrontendOptions> csv_writer(filename.filename().string() + "-" + pricing_method + "-output-" + std::to_string(replication) + ".csv");
 
-            if (pricing_method == "mip_template")
-                gap_template(filename, csv_writer);
-            else if (pricing_method == "dantzig")
-                gap_dantzig(filename, csv_writer);
-            else if (pricing_method == "wentges_template")
-                gap_wentges_template(filename, csv_writer);
-            else if (pricing_method == "wentges")
-                gap_wentges(filename, csv_writer);
+                int result = 0;
+                Parameters params;
+                params.random_seed = static_cast<int>(std::time(nullptr)) + replication;
+
+                if (pricing_method == "mip_template")
+                    result = run_gap<TemplatePrice, TemplateFarkas>(params, filename, csv_writer);
+                else if (pricing_method == "dantzig")
+                    result = run_gap<DantzigPrice, DantzigFarkas>(params, filename, csv_writer);
+                else if (pricing_method == "wentges_template")
+                    result = run_gap<WentgesTemplatePrice, WentgesTemplateFarkas>(params, filename, csv_writer);
+                else if (pricing_method == "wentges")
+                    result = run_gap<WentgesPrice, DantzigFarkas>(params, filename, csv_writer);
+
+                // if failure: repeat replication
+                if (result != 0) {
+                    --replication;
+                }
+            }
         }
 #ifdef RUN_PARALLEL
     });

@@ -4,7 +4,6 @@
 #include "block/column_generation.h"
 #include "highs/util/HighsIntegers.h"
 #include <numeric>
-#include <ctime>
 
 #include "gap_instance.h"
 #include <filesystem>
@@ -12,12 +11,12 @@
 #include "utils.h"
 
 // Supported template instantiations
-template void GapSolver::solve(TemplatePrice& pricer, TemplateFarkas& pricer_farkas);
-template void GapSolver::solve(FixedTemplatePrice& pricer, FixedTemplateFarkas& pricer_farkas);
-template void GapSolver::solve(DantzigPrice& pricer, DantzigFarkas& pricer_farkas);
-template void GapSolver::solve(WentgesPrice& pricer, DantzigFarkas& pricer_farkas);
-template void GapSolver::solve(WentgesTemplatePrice& pricer, WentgesTemplateFarkas& pricer_farkas);
-template void GapSolver::solve(WentgesTemplatePrice& pricer, TemplateFarkas& pricer_farkas);
+template int GapSolver::solve(TemplatePrice& pricer, TemplateFarkas& pricer_farkas);
+template int GapSolver::solve(FixedTemplatePrice& pricer, FixedTemplateFarkas& pricer_farkas);
+template int GapSolver::solve(DantzigPrice& pricer, DantzigFarkas& pricer_farkas);
+template int GapSolver::solve(WentgesPrice& pricer, DantzigFarkas& pricer_farkas);
+template int GapSolver::solve(WentgesTemplatePrice& pricer, WentgesTemplateFarkas& pricer_farkas);
+template int GapSolver::solve(WentgesTemplatePrice& pricer, TemplateFarkas& pricer_farkas);
 
 template bool GapSolver::restoreFeasibility(DantzigFarkas& pricer_farkas);
 template bool GapSolver::restoreFeasibility(TemplateFarkas& pricer_farkas);
@@ -91,14 +90,14 @@ void GapSolver::presolve() {
 }
 
 template <typename PricerType, typename FarkasPricerType>
-void GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
+int GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
     total_time.start();
     tbl.write_header();
 
     presolve();
 
 	if (_UB == _LB) {
-		return;
+		return 0;
 	}
 
     bool should_stop = false;
@@ -111,8 +110,8 @@ void GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
 
     rmp.reset(new Highs);
     rmp->setOptionValue("output_flag", false);
-    rmp->setOptionValue("random_seed", static_cast<int>(std::time(nullptr)));
     rmp->setOptionValue(kPresolveString, "off");
+    rmp->setOptionValue("random_seed", params.random_seed);
     std::function<HighsInt()> get_lp_iters = [&]() { return rmp->getInfo().simplex_iteration_count; };
 
     auto model = SetCoverRestrictedProblem(instance.jobs, instance.machines, ObjSense::kMinimize);
@@ -127,12 +126,9 @@ void GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
     double optimal_pricing = 0.0;
     bool any = false;
 
-cg_time.start();
-    pricer_farkas.optimize(lp._solution.row_dual, pricing, _reduced_costs);
-    add_columns(rmp.get(), instance, pricing, _reduced_costs, _ones);
-cg_time.pause();
 
-    restoreFeasibility(pricer_farkas);
+    if (!restoreFeasibility(pricer_farkas))
+        return -1;
 
     double _rmpLB = rmp->getObjectiveValue();
     updateCompactSolution();
@@ -156,7 +152,7 @@ rmp_time.start();
 
             if (rmp->getModelStatus() != HighsModelStatus::kOptimal) {
                 std::cout << fmtquill::format("{} {}: Error - {}\n", instance.name, pricer.name, (int)rmp->getModelStatus());
-                return;
+                return -1;
             }
 
             _rmpLB = rmp->getObjectiveValue();
@@ -207,307 +203,6 @@ cg_time.pause();
     tbl.output(0, 0, iteration_count, lb, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count, prune_count, leaf_count);
     csv_writer.append_row(instance.name, pricer.name, 0, 0, iteration_count, _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", 1);
 
-	bool isOptimal = gap < params.gap;
-	bool isTimeOut = params.timeout > 0 && total_time.TotalSeconds() > params.timeout;
-
-    // branch if needed
-    if (!isOptimal && !isTimeOut) {
-        PricerType pricer_branch = pricer;
-
-        openNodes.push_back({ _LB, {} });
-
-        OpenNode node;
-
-        do {
-            ++node_count;
-
-            if (node_count >= params.nodes)
-                break;
-
-            // update _LB
-            double min_lower_bound = std::numeric_limits<double>::max();
-            for (const auto& n : openNodes) {
-                min_lower_bound = std::min(min_lower_bound, n.lower_bound);
-            }
-
-            _LB = std::max(_LB, min_lower_bound);
-
-            // Lower bound
-            std::vector<OpenNode>::iterator itNode = std::min_element(openNodes.begin(), openNodes.end(),
-                [&](const OpenNode& a, const OpenNode& b) {
-                    std_counter ac;
-                    std::set_intersection(a.fixed_lb.begin(), a.fixed_lb.end(), node.fixed_lb.begin(), node.fixed_lb.end(), 
-                        std::back_inserter(ac));
-
-                    std_counter bc;
-                    std::set_intersection(b.fixed_lb.begin(), b.fixed_lb.end(), node.fixed_lb.begin(), node.fixed_lb.end(),
-                        std::back_inserter(bc));
-                    
-                    return a.lower_bound < b.lower_bound || a.lower_bound < b.lower_bound + 1e-6 && ac.count > bc.count;
-                });
-
-            node = *itNode;
-            openNodes.erase(itNode);
-
-            //
-            // apply branching constraints
-            //
-            // 
-            // update pricing
-            for (int m = 0; m < instance.machines; ++m) {
-                auto& lb = pricing[m].lb_bound;
-                std::fill(lb.begin(), lb.end(), false);
-            }
-
-            for (auto& idx : node.fixed_lb) {
-                pricing[idx / instance.jobs].lb_bound[idx % instance.jobs] = true;
-            }
-
-            // clear invalid columns
-            std::vector<int> invalid_columns;
-
-            for (size_t idx = 0, size = rmp->getNumCol(); idx < size; ++idx) {
-                auto start = col_begin(*rmp, idx);
-                auto end = --col_end(*rmp, idx);
-                auto machine = *end - instance.jobs;
-
-                // check if column is valid, i.e., if it satisfies the branching constraints
-                bool valid = true;
-
-                // fixed_lb must not be in the column
-                for (auto& fixed : node.fixed_lb) {
-                    if (machine == fixed / instance.jobs) {
-                        int job = fixed % instance.jobs;
-
-                        auto it = std::lower_bound(start, end, job);
-                        bool found = it != end && job == *it;
-
-                        if (found == true) {
-                            valid = false;
-                            break;
-                        }
-                    }
-                }
-
-                if (valid == false) {
-                    invalid_columns.push_back(idx);
-                }
-            }
-
-
-            for (int c = 0; c < rmp->getNumCol(); ++c) {
-                rmp->changeColBounds(c, 0, kHighsInf);
-            }
-
-            for (int c : invalid_columns) {
-                rmp->changeColBounds(c, 0, 0);
-            }
-
-            // restore feasibility or fathom infeasible nodes
-            if (!restoreFeasibility(pricer_farkas)) {
-                continue;
-            }
-
-            // solve CG / LP
-            // update LB/UB if appropriate
-            pricer_branch.init_feasible();
-
-            double _nodeLB = rmp->getObjectiveValue();
-            updateCompactSolution();
-
-            // primal simplex for warm-start "add columns"
-            rmp->setOptionValue("simplex_strategy", "4");
-            rmp->setOptionValue("allow_unbounded_or_infeasible", false);  // not sure if this adds unnecessary overheads
-
-            do {
-                rmp_time.start();
-                auto status = rmp->run();
-
-                if (rmp->getModelStatus() != HighsModelStatus::kOptimal) {
-                    std::cout << fmtquill::format("{} {}: Error - {}\n", instance.name, pricer.name, (int)rmp->getModelStatus());
-                    return;
-                }
-
-                _nodeLB = rmp->getObjectiveValue();
-                auto& solution = rmp->getSolution();
-                updateCompactSolution();
-                lp_iteration_count += get_lp_iters();
-                rmp_time.pause();
-
-                cg_time.start();
-                pricer_branch.update();
-                optimal_pricing = pricer_branch.optimize(solution.row_dual, pricing, _reduced_costs);
-
-                column_management.reduce(iteration_count);
-                any = add_columns(rmp.get(), instance, pricing, _reduced_costs, _ones);
-                cg_time.pause();
-
-                gap = (_UB - std::ceil(_LB - 1e-6)) / _UB;
-
-                if (gap < params.gap || _LB + 1e-6 >= _nodeLB)
-                    break;
-
-                // logging
-                csv_writer.append_row(instance.name, pricer_branch.name, node_count, openNodes.size(), iteration_count, _LB, _UB, gap * 100, _nodeLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", 2);
-
-                if (iteration_count % ITERATION_OUTPUT == 0 && total_time.TotalSeconds() - previous_logging_time > ITERATION_TIME) {
-                    tbl.output(node_count, openNodes.size(), iteration_count, _LB, _UB, gap * 100, _nodeLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count, prune_count, leaf_count);
-                    previous_logging_time = total_time.TotalSeconds();
-                }
-
-                ++iteration_count;
-
-            } while (any && (params.timeout < 0 || total_time.TotalSeconds() < params.timeout));
-
-            //pricer_farkas._template.update(rmp->getSolution(), *rmp);
-
-            updateCompactSolution();
-            double gap = std::abs(100.0 * (_UB - std::ceil(_LB - 1e-6)) / _UB);
-            csv_writer.append_row(instance.name, pricer_branch.name, node_count, openNodes.size(), iteration_count, _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", 3);
-
-            if (iteration_count % ITERATION_OUTPUT == 0 && total_time.TotalSeconds() - previous_logging_time > ITERATION_TIME) {
-                tbl.output(node_count, openNodes.size(), iteration_count, _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count, prune_count, leaf_count);
-                previous_logging_time = total_time.TotalSeconds();
-            }
-
-            isOptimal = gap < params.gap;
-            isTimeOut = params.timeout > 0 && total_time.TotalSeconds() > params.timeout;
-
-            prune_count += _nodeLB >= _UB;
-            leaf_count += isIntegral;
-
-            if (isOptimal || isTimeOut) {
-                _LB = std::ceil(_LB - 1e-6);
-                tbl.output(node_count, openNodes.size(), iteration_count, _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count, prune_count, leaf_count);
-                break;
-            }
-
-            // prune if node lb >= global UB
-            if (_nodeLB >= _UB || isIntegral) {
-                continue;
-            }
-
-            // choose new branching variable
-            // TODO: improve choice!!
-
-            // choose job most fractional machines
-            int best_job = -1;
-            double best_tie_breaker = 0;
-            std::vector<int> branching_machines;
-            std::vector<int> branching_tmp;
-
-            for (int j = 0; j < instance.jobs; ++j) {
-                double tie_break = 0;
-                branching_tmp.clear();
-                bool has_fractional = false;
-
-                for (int m = 0; m < instance.machines; ++m) {
-                    int idx = m * instance.jobs + j;
-
-                    if (!HighsIntegers::isIntegral(_compact_solution[idx], 1e-6)) {
-                        has_fractional = true;
-                        tie_break += instance.profit[m][j] * _compact_solution[idx];
-                        branching_tmp.push_back(idx);
-                    }
-                }
-
-                if (has_fractional && (best_job == -1 || (branching_tmp.size() > branching_machines.size() || branching_tmp.size() == branching_machines.size() && tie_break > best_tie_breaker))) {
-                //if (has_fractional && (best_job == -1 || tie_break < best_tie_breaker)) {
-                    branching_machines.swap(branching_tmp);
-                    best_tie_breaker = tie_break;
-                    best_job = j;
-                }
-            }
-
-            node.lower_bound = _nodeLB;
-
-            // GUB branching, branch zeros only, but in subsets
-            std::vector<HighsInt> remaining_machines;
-            std::vector<HighsInt> remaining_machines_tmp;
-
-            remaining_machines.reserve(instance.machines);
-
-            for (int idx = best_job, size = instance.machines * instance.jobs; idx < size; idx += instance.jobs) {
-				remaining_machines.push_back(idx);
-            }
-
-			std::set_difference(remaining_machines.begin(), remaining_machines.end(), node.fixed_lb.begin(), node.fixed_lb.end(),
-                std::back_inserter(remaining_machines_tmp));
-
-			remaining_machines.swap(remaining_machines_tmp);
-			remaining_machines_tmp.clear();
-
-            std::set_difference(remaining_machines.begin(), remaining_machines.end(), branching_machines.begin(), branching_machines.end(),
-                std::back_inserter(remaining_machines_tmp));
-
-            remaining_machines.swap(remaining_machines_tmp);
-
-			// need to partition these machines into two sets, should be a superset of branching_machines
-			// need to partition branching_machines into these two sets, try to balance its mass
-            double d1 = 0, d2 = 0;
-			int i1 = 0, i2 = 0;
-            OpenNode p1 = node;
-            OpenNode p2 = node;
-
-            if (branching_machines.size() == 2) {
-                p1.fixed_lb.push_back(branching_machines[0]);
-                p2.fixed_lb.push_back(branching_machines[1]);
-            }
-            else {
-                // sort in descending order for better balanced partition
-                std::stable_sort(branching_machines.begin(), branching_machines.end(), [&](int a, int b) {
-                    return _compact_solution[a] > _compact_solution[b];
-                });
-
-                // greedy balance
-                for (int idx : branching_machines) {
-                    if (d1 < d2) {
-                        p1.fixed_lb.push_back(idx);
-                        d1 += _compact_solution[idx];
-                        ++i1;
-                    }
-                    else {
-                        p2.fixed_lb.push_back(idx);
-                        d2 += _compact_solution[idx];
-                        ++i2;
-                    }
-                }
-            }
-
-			// assign the remaining machines (greedily)
-            d1 = d2 = 0;
-            // sort in descending order for better balanced partition
-            std::stable_sort(remaining_machines.begin(), remaining_machines.end(), [&](int a, int b) {
-                int ma = a / instance.jobs;
-                int mb = b / instance.jobs;
-
-                double sa = instance.demands[ma][best_job] / instance.capacity[ma];
-                double sb = instance.demands[mb][best_job] / instance.capacity[mb];
-
-                return instance.profit[ma][best_job] * sa > instance.profit[mb][best_job] * sb;
-            });
-
-			for (int idx : remaining_machines) {
-				if (d1 < d2) {
-					p1.fixed_lb.push_back(idx);
-					++i1;
-                    d1 += instance.profit[idx / instance.jobs][best_job];
-				}
-				else {
-					p2.fixed_lb.push_back(idx);
-					++i2;
-                    d2 += instance.profit[idx / instance.jobs][best_job];
-                }
-			}
-
-			std::stable_sort(p1.fixed_lb.begin(), p1.fixed_lb.end());
-            std::stable_sort(p2.fixed_lb.begin(), p2.fixed_lb.end());
-
-            openNodes.push_back(p1);
-            openNodes.push_back(p2);
-
-        } while (openNodes.empty() == false);
-    }
 
     csv_writer.append_row(instance.name, pricer.name, node_count, openNodes.size(), iteration_count, _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", 4);
 
@@ -519,6 +214,8 @@ cg_time.pause();
 		"Total: {:.3f} s\n" 
 		"#Cols: {}\n"  
         "Gap  : {:.2f}% \n", instance.name, pricer.name, rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), rmp->getNumCol(), gap);
+
+    return 0;
 }
 
 template <typename FarkasPricerType>
@@ -551,7 +248,9 @@ rmp_time.start();
 rmp_time.pause();
 
 cg_time.start();
-        if (has_dual_ray == true || rmp->getNumCol() == 0) {
+        has_dual_ray |= rmp->getNumCol() == 0;
+
+        if (has_dual_ray) {
             if (pricer_farkas.optimize(dual_ray, pricing, _reduced_costs) > -kHighsInf)
                 add_columns(rmp.get(), instance, pricing, _reduced_costs, _ones);
             else {
@@ -593,16 +292,13 @@ void GapSolver::updateCompactSolution() {
     }
 
 	// check if integral
-	//isIntegral = true;
-    fractional_count = 0;
+	fractional_count = 0;
 
 	for (double val : _compact_solution) {
         fractional_count += size_t(val > 1e-6 && val < 1 - 1e-6);
 	}
 
-    isIntegral = fractional_count == 0;
-
-	if (isIntegral) {
+	if (fractional_count == 0) {
 		double tmpUB = 0;
 		for (int m = 0; m < instance.machines; ++m) {
 			auto& profit = instance.profit[m];
@@ -616,28 +312,13 @@ void GapSolver::updateCompactSolution() {
 		}
 	}
 
-    //bool hasDuplicates = false;
-    //for (int j = 0; j < instance.jobs; ++j) {
-    //    double tmp = 0;
-    //    for (int m = 0; m < instance.machines; ++m) {
-    //        tmp += _compact_solution[m * instance.jobs + j];
-    //    }
-
-    //    if (tmp > 1 + 1e-6) {
-    //        hasDuplicates = true;
-    //        break;
-    //    }
-    //}
-
+	// if using cover (instead of partition), we might need to remove duplicate jobs
     if (basis_size == instance.machines) {
         double tmpUB = remove_duplicates(instance, rmp.get());
 
         if (_UB > tmpUB) {
 			_UB = tmpUB;
-            //_compact_solution_best = _compact_solution;
         }
-
-        //isIntegral = true;
     }
 }
 
