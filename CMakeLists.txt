@@ -1,4 +1,4 @@
-﻿cmake_minimum_required (VERSION 3.15)
+﻿cmake_minimum_required (VERSION 3.9.4)
 
 project("colgen_pricing" CXX)
 find_package(highs REQUIRED)
@@ -10,6 +10,15 @@ file(GLOB_RECURSE SOURCE_FILES src/*.cpp)
 
 include_directories(${QUILL_INCLUDE_DIRS})
 add_executable(${PROJECT_NAME} ${INCLUDE_FILES} ${SOURCE_FILES})
+
+include(CheckIPOSupported)
+check_ipo_supported(RESULT supported OUTPUT error)
+
+if(supported)
+    message(STATUS "IPO / LTO enabled")
+else()
+    message(STATUS "IPO / LTO not supported: <${error}>")
+endif()
 
 target_link_libraries(${PROJECT_NAME} highs::highs)
 target_include_directories(${PROJECT_NAME} PUBLIC src)
