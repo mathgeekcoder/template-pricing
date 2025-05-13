@@ -315,72 +315,98 @@ void GapSolver::updateCompactSolution() {
     }
 }
 
+// we might have duplicate jobs since RMP uses cover (instead of partition)
+// if we have an integral solution we need to remove duplicates to get the correct UB
 double GapSolver::remove_duplicates() {
-    double cost = 0;
-	auto& solution = rmp->getSolution();
-    std::vector<std::vector<int>> job_machine(instance.jobs);
+    const auto& solution = rmp->getSolution();
+    const HighsInt* basis = rmp->getBasicVariablesArray();
+    const HighsInt num_col = rmp->getNumCol();
 
-    // check duplicates
-	// we assume that the last element of a column is the machine index
-    for (size_t idx = 0, size = rmp->getNumCol(); idx < size; ++idx) {
-        if (solution.col_value[idx] > 1e-6) {
-            auto end = --col_end(*rmp, idx);
-            auto machine = *end - instance.jobs;
+    // assume unlikely to have duplicates
+	bool has_duplicates = false;
+    std::vector<bool> has_job(instance.jobs, false);
 
-            for (auto it = col_begin(*rmp, idx); it != end; ++it) {
-                job_machine[*it].push_back(machine);
-                cost += instance.profit[machine][*it];
+    for (int i = rmp->getNumRow() - 1; i >= 0; --i) {
+        if (basis[i] < num_col && solution.col_value[basis[i]] > 1e-6) {
+            for (auto it = col_begin(*rmp, basis[i]), end = --col_end(*rmp, basis[i]); it != end; ++it) {
+				has_duplicates |= has_job[*it];
+                has_job[*it] = true;
             }
         }
     }
 
-    // remove duplicates, keep cheapest one
-    std::vector<std::vector<int>> partition(instance.machines);
-	bool any = false;
+	// no duplicates
+	if (!has_duplicates) {
+		return rmp->getObjectiveValue();
+	}
+    else {
+        // assume that basis = machines, then solution (and duplicate) is integral
+        double total_cost = rmp->getObjectiveValue();
+        std::vector<std::vector<int>> machine_jobs(instance.machines);
+		std::vector<std::vector<int>> job_machines(instance.jobs);
 
-    for (int j = 0; j < instance.jobs; ++j) {
-        if (job_machine[j].size() > 1) {
-            double min_cost = std::numeric_limits<double>::max();
-            double total_cost = 0;
-			int best_machine = -1;
+		// copy job/machine for easy lookup
+        for (int i = rmp->getNumRow() - 1; i >= 0; --i) {
+            if (basis[i] < num_col && solution.col_value[basis[i]] > 1e-6) {
+                auto end = --col_end(*rmp, basis[i]);
+				auto machine = *end - instance.jobs;
+				std::copy(col_begin(*rmp, basis[i]), end, std::back_inserter(machine_jobs[machine]));
 
-            for (int m : job_machine[j]) {
-                total_cost += instance.profit[m][j];
-
-                if (min_cost > instance.profit[m][j]) {
-                    min_cost = instance.profit[m][j];
-                    best_machine = m;
+                for (auto j : machine_jobs[machine]) {
+                    job_machines[j].emplace_back(machine);
                 }
             }
-
-            cost -= (total_cost - min_cost);
-            partition[best_machine].push_back(j);
-			any = true;
         }
-		else if (job_machine[j].size() == 1)
-			partition[job_machine[j][0]].push_back(j);
-    }
 
-    if (any) {
-        // add modified columns back into RMP to get partition instead of cover
-        std::vector<double> ones(instance.jobs + 1, 1);
+        std::vector<bool> updated_machines(instance.machines);
 
-        for (int m = 0; m < instance.machines; ++m) {
-            auto& profit = instance.profit[m];
-            double cost = 0;
+        // choose cheapest machine for each duplicate job
+		for (int j = 0; j < instance.jobs; ++j) {
+            if (job_machines[j].size() > 1) {
+				int best_machine = -1;
+				double min_cost = std::numeric_limits<double>::max();
+                
+				for (int m : job_machines[j]) {
+					double cost = instance.profit[m][j];
+					total_cost -= cost;
 
-            for (auto j : partition[m]) {
-                cost += profit[j];
+					if (min_cost > cost) {
+                        if (best_machine != -1) {
+                            // remove from previous machine
+                            auto it = std::lower_bound(machine_jobs[best_machine].begin(), machine_jobs[best_machine].end(), j);
+                            machine_jobs[best_machine].erase(it);
+							updated_machines[best_machine] = true;
+                        }
+
+						// update best machine
+                        min_cost = cost;
+                        best_machine = m;
+					}
+                    else {
+                        // remove from machine
+                        auto it = std::lower_bound(machine_jobs[m].begin(), machine_jobs[m].end(), j);
+                        machine_jobs[m].erase(it);
+                        updated_machines[m] = true;
+                    }
+				}
+
+                total_cost += instance.profit[best_machine][j];
             }
+		}
 
-            partition[m].push_back(instance.jobs + m);
-            rmp->addCol(cost, 0, kHighsInf, partition[m].size(), partition[m].data(), ones.data());
+        // add modified columns back into RMP to get partition instead of cover
+        // need to do this for each of the machines
+        for (int m = 0; m < instance.machines; ++m) {
+            if (updated_machines[m]) {
+                double cost = sum(machine_jobs[m], 0.0, instance.profit[m]);
+                machine_jobs[m].push_back(instance.jobs + m);
+                rmp->addCol(cost, 0, kHighsInf, machine_jobs[m].size(), machine_jobs[m].data(), _ones.data());
+            }
         }
 
         rmp->run();
+		return total_cost;
     }
-
-    return cost;
 }
 
 bool GapSolver::add_columns(std::vector<double>& reduced_costs) {
