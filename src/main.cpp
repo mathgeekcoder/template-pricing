@@ -94,7 +94,7 @@ int main(int argc, char* argv[])
 
                 int result = 0;
                 Parameters params;
-                params.random_seed = replication;// static_cast<int>(std::time(nullptr)) + replication;
+                params.random_seed = static_cast<int>(std::time(nullptr)) + replication;
 				std::cout << "Random seed: " << params.random_seed << std::endl;
 
                 if (pricing_method == "mip_template")
