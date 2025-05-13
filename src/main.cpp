@@ -86,25 +86,34 @@ int main(int argc, char* argv[])
 #else
         for (const fs::path& filename : filePaths) {
 #endif
+            int retries = 5;
+
             for (int replication = 1; replication <= REPLICATIONS; ++replication) {
                 std::cout << std::endl << "Replication: " << replication << std::endl;
                 quill::CsvWriter<CsvSchema, quill::FrontendOptions> csv_writer(filename.filename().string() + "-" + pricing_method + "-output-" + std::to_string(replication) + ".csv");
 
                 int result = 0;
                 Parameters params;
-                params.random_seed = static_cast<int>(std::time(nullptr)) + replication;
+                params.random_seed = replication;// static_cast<int>(std::time(nullptr)) + replication;
+				std::cout << "Random seed: " << params.random_seed << std::endl;
 
                 if (pricing_method == "mip_template")
                     result = run_gap<TemplatePrice, TemplateFarkas>(params, filename, csv_writer);
-                else if (pricing_method == "dantzig")
-                    result = run_gap<DantzigPrice, DantzigFarkas>(params, filename, csv_writer);
                 else if (pricing_method == "wentges_template")
                     result = run_gap<WentgesTemplatePrice, WentgesTemplateFarkas>(params, filename, csv_writer);
                 else if (pricing_method == "wentges")
                     result = run_gap<WentgesPrice, DantzigFarkas>(params, filename, csv_writer);
+                else if (pricing_method == "dantzig") {
+                    params.min_col_factor = 3;
+                    params.max_col_factor = 6;
+                    result = run_gap<DantzigPrice, DantzigFarkas>(params, filename, csv_writer);
+                }
 
                 // if failure: repeat replication
                 if (result != 0) {
+                    if (--retries < 0) {
+                        exit(-1);
+                    }
                     --replication;
                 }
             }
@@ -113,5 +122,6 @@ int main(int argc, char* argv[])
     });
 #endif
 
+    quill::Backend::stop();
     return 0;
 }

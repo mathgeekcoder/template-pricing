@@ -19,15 +19,20 @@ struct CsvSchema {
     static constexpr char const* format = "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}";
 };
 
-struct DualColumnManagement {
+struct AgeColumnManagement {
     Highs* _rmp = nullptr;
-    GapInstance* _instance = nullptr;
+    const GapInstance* _instance = nullptr;
+    int MIN_COLS = 0;
+    int MAX_COLS = 0;
     std::vector<uint32_t> _age;
 
-    void init(Highs* rmp, GapInstance* instance) {
+    void init(Highs* rmp, const GapInstance* instance, const Parameters& params) {
         _rmp = rmp;
         _instance = instance;
 		_age.resize(_rmp->getNumCol(), 0);
+
+        MIN_COLS = params.min_col_factor * _rmp->getNumRow();
+        MAX_COLS = params.max_col_factor * _rmp->getNumRow();
     }
 
     void reduce(size_t iteration_count);
@@ -198,7 +203,7 @@ struct FixedTemplateFarkas {
                 pricing[m].solution.push_back(_instance->jobs + m);
                 reduced_costs[m] = obj != -kHighsInf ? 1 : -kHighsInf;
             }
-            });
+        });
 
         double feasible = 0;
         for (int m = 0; m < _instance->machines; ++m) {
@@ -210,15 +215,9 @@ struct FixedTemplateFarkas {
 };
 
 
-struct OpenNode {
-    double lower_bound = -kHighsInf;
-    bool lpOptimal = false;
-    std::vector<HighsInt> fixed_lb;
-};
-
 struct GapSolver {
     static constexpr int ITERATION_OUTPUT = 5;
-    static constexpr double ITERATION_TIME = 1.0;
+    static constexpr double ITERATION_TIME = 1;
 
     int basis_size = 0;
     size_t iteration_count = 0;
@@ -238,12 +237,11 @@ struct GapSolver {
 
     quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer;
     std::vector<double> _compact_solution;
-    std::vector<double> _compact_solution_best;
     std::vector<double> _ones;
     std::vector<double> _reduced_costs;
 
     ColumnAlignOutput tbl;
-    DualColumnManagement column_management;
+    AgeColumnManagement column_management;
     PricingBlockVector<GapPricing> pricing;
     gap_compact lp;
 
@@ -253,7 +251,6 @@ struct GapSolver {
         _ones.assign(instance.jobs + 1, 1);
         _reduced_costs.assign(instance.machines, 0);
 		_compact_solution.assign(instance.jobs * instance.machines, 0);
-		_compact_solution_best.assign(instance.jobs * instance.machines, 0);
 
 		tbl.show_output = params.show_output;
         tbl.add_column("#Nodes", 7);
@@ -273,12 +270,10 @@ struct GapSolver {
         tbl.add_column("#Leaf", 7);
     }
 
-    // used for branching
-    std::vector<OpenNode> openNodes;
-
     void presolve();
 
-    template <typename PricerType, typename FarkasPricerType> int solve(PricerType& pricer, FarkasPricerType& pricer_farkas);
+    template <typename PricerType, typename FarkasPricerType> 
+    int solve(PricerType& pricer, FarkasPricerType& pricer_farkas);
 
     template <typename PricerType, typename FarkasPricerType>
     int solve() {
@@ -290,4 +285,7 @@ struct GapSolver {
     template <typename FarkasPricerType>
     bool restoreFeasibility(FarkasPricerType &pricer_farkas);
 	void updateCompactSolution();
+
+    bool add_columns(std::vector<double>& reduced_costs);
+    double remove_duplicates();
 };

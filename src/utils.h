@@ -11,6 +11,7 @@
 #include <charconv>
 #include "highs/Highs.h"
 #include <mutex>
+#include <format>
 
 struct Timer
 {
@@ -177,34 +178,36 @@ class ColumnAlignOutput {
    std::vector<int> _width;
    std::vector<int> _precision;
    std::vector<std::string> _name;
-   std::stringstream ss;
+   std::string _output;
 
    template <class T>
    void display(int index, const T& a) {
-       ss << std::fixed << std::setprecision(_precision[index]) << std::setw(_width[index]) << a;
+	   std::format_to(std::back_inserter(_output), "{:>{}}", a, _width[index]);
    }
 
    void display(int index, const char*& a) {
-       ss << std::setw(_width[index]) << a;
+       std::format_to(std::back_inserter(_output), "{:>{}}", a, _width[index]);
    }
 
    void display(int index, const double& a) {
-	   if (std::isnan(a) || std::isinf(a))
-           ss << std::setw(_width[index]) << "-";
+       if (std::isnan(a) || std::isinf(a)) {
+           std::format_to(std::back_inserter(_output), "{:>{}}", "-", _width[index]);
+       }
        // if decimal number is larger than width, then use scientific notation
-       else if (baseTenDigits(abs(a)) + _precision[index] + 3 > _width[index])
-           ss << std::scientific << std::setprecision(_width[index] - 8) << std::setw(_width[index]) << a;
-       else
-           ss << std::fixed << std::setprecision(_precision[index]) << std::setw(_width[index]) << a;
+       else if (baseTenDigits(abs(a)) + _precision[index] + 3 > _width[index]) {
+           std::format_to(std::back_inserter(_output), "{:>{}.{}e}", a, _width[index], _width[index] - 8);
+       }
+       else {
+           std::format_to(std::back_inserter(_output), "{:>{}.{}f}", a, _width[index], _precision[index]);
+       }
    }
 
    // Recursive variadic template to bind values to the statement.
    template <class T>
    void output_index(int index, const T& a) {
        display(index, a);
-       std::cout << ss.str() << std::endl;
-       ss.str(""); // clear the stringstream
-       ss.clear();
+       std::cout << _output << std::endl;
+       _output.clear(); // clear the output string
    }
 
    template <class T, class ...Args>
@@ -220,12 +223,11 @@ public:
     void write_header() {
         if (show_output) {
             for (int i = 0; i < _name.size(); ++i) {
-                ss << std::setw(_width[i]) << _name[i];
+                std::format_to(std::back_inserter(_output), "{:>{}}", _name[i], _width[i]);
             }
 
-            std::cout << ss.str() << std::endl;
-            ss.str(""); // clear the stringstream
-            ss.clear();
+            std::cout << _output << std::endl;
+            _output.clear(); // clear the output string
         }
 	}
 

@@ -4,40 +4,27 @@
 #include "block/column_generation.h"
 #include "highs/util/HighsIntegers.h"
 #include <numeric>
+#include <format>
 
 #include "gap_instance.h"
 #include <filesystem>
-#include "quill/bundled/fmt/format.h"
 #include "utils.h"
 
 // Supported template instantiations
-template int GapSolver::solve(TemplatePrice& pricer, TemplateFarkas& pricer_farkas);
-template int GapSolver::solve(FixedTemplatePrice& pricer, FixedTemplateFarkas& pricer_farkas);
 template int GapSolver::solve(DantzigPrice& pricer, DantzigFarkas& pricer_farkas);
 template int GapSolver::solve(WentgesPrice& pricer, DantzigFarkas& pricer_farkas);
 template int GapSolver::solve(WentgesTemplatePrice& pricer, WentgesTemplateFarkas& pricer_farkas);
-template int GapSolver::solve(WentgesTemplatePrice& pricer, TemplateFarkas& pricer_farkas);
+template int GapSolver::solve(TemplatePrice& pricer, TemplateFarkas& pricer_farkas);
 
 template bool GapSolver::restoreFeasibility(DantzigFarkas& pricer_farkas);
 template bool GapSolver::restoreFeasibility(TemplateFarkas& pricer_farkas);
 
-double remove_duplicates(GapInstance& instance, Highs* rmp);
-bool add_columns(Highs* rmp, GapInstance& instance, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs, std::vector<double>& ones);
+void AgeColumnManagement::reduce(size_t iteration_count) {
+    // we add at most #machines columns per iteration, so there is at least #rows / #machines iterations 
+	// before we have added #rows columns.
+    const int AGE_THRESHOLD = std::max(5, (MAX_COLS - MIN_COLS) / _instance->machines);
 
-template <>
-void TemplateFarkas::init<FixedTemplatePrice>(FixedTemplatePrice& pricer, PricingBlockVector<GapPricing>& pricing, gap_compact& lp) {
-    _instance = pricer._instance;
-    _template = pricer._template;
-}
-
-void DualColumnManagement::reduce(size_t iteration_count) {
-    const int MIN_COLS = 2 * _rmp->getNumRow();
-    const int MAX_COLS = 3 * _rmp->getNumRow();
-
-    // we add at most # machines per iteration, so there is at least # rows / # machines iterations before we can remove a column
-    const int AGE_THRESHOLD = std::max(5, _rmp->getNumRow() / _instance->machines);
-
-	// age the columns, i.e., set the current basis to the current iteration
+	// "age" the columns, i.e., set the current basis to the current iteration
     const HighsInt* basis = _rmp->getBasicVariablesArray();
     const HighsInt num_col = _rmp->getNumCol();
 
@@ -51,21 +38,25 @@ void DualColumnManagement::reduce(size_t iteration_count) {
 
 	// remove old columns if we've got too many
     if (num_col > MAX_COLS && iteration_count > AGE_THRESHOLD) {
+        const int can_remove = num_col - MIN_COLS;
+		const int age_threshold = iteration_count - AGE_THRESHOLD;
+        
         std::vector<int> indices_to_remove;
-        int can_remove = num_col - MIN_COLS;
+        indices_to_remove.reserve(can_remove);
 
 		// columns with earlier index are likely older, so if we hit the `can_remove` limit, 
         // we stop but are likely to remove the older ones anyhow
 		for (int i = 0; i < num_col && indices_to_remove.size() < can_remove; ++i) {
-            if (_age[i] < iteration_count - AGE_THRESHOLD) {
+            if (_age[i] < age_threshold) {
                 indices_to_remove.emplace_back(i);
             }
 		}
 
         // remove the columns from model and from _age
-		for (int i = indices_to_remove.size() - 1; i >= 0; --i) {
-			_age.erase(_age.begin() + indices_to_remove[i]);
-    	}
+        // reverse order to preserve correct index
+		for (auto it = indices_to_remove.crbegin(); it != indices_to_remove.crend(); ++it) {
+			_age.erase(_age.begin() + *it);
+		}
         _rmp->deleteCols(indices_to_remove.size(), indices_to_remove.data());
     }
 }
@@ -104,7 +95,7 @@ int GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
     HandleCtrlC ctrl_c_handler([&]() { 
 		if (should_stop) exit(-1);  // force stop
 
-		std::cout << fmtquill::format("{} {}: Ctrl-C pressed, stopping...\n", instance.name, pricer.name);
+		std::cout << std::format("{} {}: Ctrl-C pressed, stopping...\n", instance.name, pricer.name);
         should_stop = true; 
     });
 
@@ -117,7 +108,7 @@ int GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
     auto model = SetCoverRestrictedProblem(instance.jobs, instance.machines, ObjSense::kMinimize);
     rmp->passModel(model);
     pricer.init(rmp.get(), &instance);
-    column_management.init(rmp.get(), &instance);
+    column_management.init(rmp.get(), &instance, params);
 
     // initialize pricing
     pricing.init(instance);
@@ -125,7 +116,6 @@ int GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
 
     double optimal_pricing = 0.0;
     bool any = false;
-
 
     if (!restoreFeasibility(pricer_farkas))
         return -1;
@@ -142,7 +132,6 @@ int GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
     //rmp->setOptionValue(kRunCrossoverString, kHighsOffString);
     pricer.init_feasible();
 
-    int new_columns_index = rmp->getNumCol();
     size_t node_count = 0;
 
     if (params.nodes > 0) {
@@ -151,7 +140,7 @@ rmp_time.start();
             auto status = rmp->run();
 
             if (rmp->getModelStatus() != HighsModelStatus::kOptimal) {
-                std::cout << fmtquill::format("{} {}: Error - {}\n", instance.name, pricer.name, (int)rmp->getModelStatus());
+                std::cout << std::format("{} {}: Error - {}\n", instance.name, pricer.name, (int)rmp->getModelStatus());
                 return -1;
             }
 
@@ -167,9 +156,7 @@ cg_time.start();
             optimal_pricing = pricer.optimize(solution.row_dual, pricing, _reduced_costs);
 
             column_management.reduce(iteration_count);
-
-            new_columns_index = rmp->getNumCol();
-            any = add_columns(rmp.get(), instance, pricing, _reduced_costs, _ones);
+            any = add_columns(_reduced_costs);
 
             // ASSUMES lambda <= 1, otherwise need to scale (e.g. _rmpLB / (1 + reduced cost))
             // This is only valid in root node, otherwise need to keep track of worst node
@@ -202,11 +189,9 @@ cg_time.pause();
     double gap = std::abs(100.0 * (_UB - lb) / _UB);
     tbl.output(0, 0, iteration_count, lb, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count, prune_count, leaf_count);
     csv_writer.append_row(instance.name, pricer.name, 0, 0, iteration_count, _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", 1);
+    csv_writer.append_row(instance.name, pricer.name, node_count, 0, iteration_count, _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", 4);
 
-
-    csv_writer.append_row(instance.name, pricer.name, node_count, openNodes.size(), iteration_count, _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", 4);
-
-    std::cout << fmtquill::format("\n"
+    std::cout << std::format("\n"
 		"Inst : {}\n"
 		"Price: {}\n"
         "RMP  : {:.3f} s\n" 
@@ -226,15 +211,22 @@ bool GapSolver::restoreFeasibility(FarkasPricerType &pricer_farkas) {
     rmp->setOptionValue("simplex_strategy", "1"); // need to use dual solver for extreme ray
     rmp->setOptionValue("allow_unbounded_or_infeasible", true);
 
+    // initialize RMP if empty
+cg_time.start();
+    if (rmp->getNumCol() == 0 && pricer_farkas.optimize(dual_ray, pricing, _reduced_costs) > -kHighsInf) {
+        add_columns(_reduced_costs);
+        ++iteration_count;
+    }
+cg_time.pause();
+
     // tight loop to restore feasibility (assuming possible!)
     do {
 rmp_time.start();
-        //rmp->clearSolver();
         auto status = rmp->run();
 
         // HiGHs has gotten into a bad state, so we need to reset?
         if (status == HighsStatus::kError) {
-            std::cout << fmtquill::format("{}: Unrecoverable Error\n", instance.name);
+            std::cout << std::format("{}: Unrecoverable Error\n", instance.name);
             return false;
         }
 
@@ -242,17 +234,16 @@ rmp_time.start();
         lp_iteration_count += rmp->getInfo().simplex_iteration_count;
 
         if (rmp->getModelStatus() == HighsModelStatus::kUnknown && has_dual_ray == false) {
-            std::cout << fmtquill::format("{}: Test Error - {}\n", instance.name, (int)rmp->getModelStatus());
+            std::cout << std::format("{}: Test Error - {}\n", instance.name, (int)rmp->getModelStatus());
             return false;
         }
 rmp_time.pause();
 
 cg_time.start();
-        has_dual_ray |= rmp->getNumCol() == 0;
-
         if (has_dual_ray) {
-            if (pricer_farkas.optimize(dual_ray, pricing, _reduced_costs) > -kHighsInf)
-                add_columns(rmp.get(), instance, pricing, _reduced_costs, _ones);
+            if (pricer_farkas.optimize(dual_ray, pricing, _reduced_costs) > -kHighsInf) {
+                add_columns(_reduced_costs);
+            }
             else {
 				std::cout << "Node infeasible!" << std::endl;
                 return false;
@@ -275,54 +266,56 @@ cg_time.pause();
 void GapSolver::updateCompactSolution() {
     const auto& solution = rmp->getSolution();
 
-    basis_size = 0;
-	std::fill(_compact_solution.begin(), _compact_solution.end(), 0);
+    if (solution.value_valid) {
+        basis_size = 0;
+        std::fill(_compact_solution.begin(), _compact_solution.end(), 0);
 
-    // try to find UB solution
-    for (size_t idx = 0, size = rmp->getNumCol(); idx < size; ++idx) {
-        if (solution.col_value[idx] > 1e-6) {
-            ++basis_size;
-            auto end = --col_end(*rmp, idx);
-            auto machine = *end - instance.jobs;
+        // try to find UB solution
+        for (size_t idx = 0, size = rmp->getNumCol(); idx < size; ++idx) {
+            if (solution.col_value[idx] > 1e-6) {
+                ++basis_size;
+                auto end = --col_end(*rmp, idx);
+                auto machine = *end - instance.jobs;
 
-            for (auto it = col_begin(*rmp, idx); it != end; ++it) {
-                _compact_solution[machine * instance.jobs + *it] += solution.col_value[idx];
+                for (auto it = col_begin(*rmp, idx); it != end; ++it) {
+                    _compact_solution[machine * instance.jobs + *it] += solution.col_value[idx];
+                }
             }
         }
-    }
 
-	// check if integral
-	fractional_count = 0;
+        // check if integral
+        fractional_count = 0;
 
-	for (double val : _compact_solution) {
-        fractional_count += size_t(val > 1e-6 && val < 1 - 1e-6);
-	}
+        for (double val : _compact_solution) {
+            fractional_count += size_t(val > 1e-6 && val < 1 - 1e-6);
+        }
 
-	if (fractional_count == 0) {
-		double tmpUB = 0;
-		for (int m = 0; m < instance.machines; ++m) {
-			auto& profit = instance.profit[m];
-			for (int j = 0; j < instance.jobs; ++j) {
-				tmpUB += _compact_solution[m * instance.jobs + j] > 1e-6 ? profit[j] : 0;
-			}
-		}
+        if (fractional_count == 0) {
+            double tmpUB = 0;
+            for (int m = 0; m < instance.machines; ++m) {
+                auto& profit = instance.profit[m];
+                for (int j = 0; j < instance.jobs; ++j) {
+                    tmpUB += profit[j] * std::ceil(_compact_solution[m * instance.jobs + j] - 1e-6);
+                }
+            }
 
-		if (_UB > tmpUB) {
-			_UB = tmpUB;
-		}
-	}
+            if (_UB > tmpUB) {
+                _UB = tmpUB;
+            }
+        }
 
-	// if using cover (instead of partition), we might need to remove duplicate jobs
-    if (basis_size == instance.machines) {
-        double tmpUB = remove_duplicates(instance, rmp.get());
+        // if using cover (instead of partition), we might need to remove duplicate jobs
+        if (basis_size == instance.machines) {
+            double tmpUB = remove_duplicates();
 
-        if (_UB > tmpUB) {
-			_UB = tmpUB;
+            if (_UB > tmpUB) {
+                _UB = tmpUB;
+            }
         }
     }
 }
 
-double remove_duplicates(GapInstance& instance, Highs* rmp) {
+double GapSolver::remove_duplicates() {
     double cost = 0;
 	auto& solution = rmp->getSolution();
     std::vector<std::vector<int>> job_machine(instance.jobs);
@@ -390,7 +383,7 @@ double remove_duplicates(GapInstance& instance, Highs* rmp) {
     return cost;
 }
 
-bool add_columns(Highs* rmp, GapInstance& instance, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs, std::vector<double>& ones) {
+bool GapSolver::add_columns(std::vector<double>& reduced_costs) {
     bool any = false;
 
     for (int m = 0; m < instance.machines; ++m) {
@@ -405,7 +398,7 @@ bool add_columns(Highs* rmp, GapInstance& instance, PricingBlockVector<GapPricin
 				cost += profit[pricing[m].solution[i]];
 			}
 
-            rmp->addCol(cost, 0, kHighsInf, pricing[m].solution.size(), pricing[m].solution.data(), ones.data());
+            rmp->addCol(cost, 0, kHighsInf, pricing[m].solution.size(), pricing[m].solution.data(), _ones.data());
             any = true;
         }
     }
