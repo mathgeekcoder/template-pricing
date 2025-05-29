@@ -13,51 +13,50 @@
 // Supported template instantiations
 template int GapSolver::solve(DantzigPrice& pricer, DantzigFarkas& pricer_farkas);
 template int GapSolver::solve(WentgesPrice& pricer, DantzigFarkas& pricer_farkas);
-template int GapSolver::solve(WentgesTemplatePrice& pricer, WentgesTemplateFarkas& pricer_farkas);
 template int GapSolver::solve(TemplatePrice& pricer, TemplateFarkas& pricer_farkas);
+template int GapSolver::solve(LagrangeTemplatePrice& pricer, LagrangeTemplateFarkas& pricer_farkas);
 
 template bool GapSolver::restoreFeasibility(DantzigFarkas& pricer_farkas);
 template bool GapSolver::restoreFeasibility(TemplateFarkas& pricer_farkas);
 
-void AgeColumnManagement::reduce(size_t iteration_count) {
-    // we add at most #machines columns per iteration, so there is at least #rows / #machines iterations 
-	// before we have added #rows columns.
-    const int AGE_THRESHOLD = std::max(5, (MAX_COLS - MIN_COLS) / _instance->machines);
-
-	// "age" the columns, i.e., set the current basis to the current iteration
+void AgeColumnManagement::reduce(uint32_t iteration_count) {
+    // "age" the columns, i.e., set the current basis to the current iteration
+    const auto& solution = _rmp->getSolution();
     const HighsInt* basis = _rmp->getBasicVariablesArray();
-    const HighsInt num_col = _rmp->getNumCol();
+    const uint32_t num_col = _rmp->getNumCol();
+    uint32_t basis_size = 0;
+    _age.resize(num_col, iteration_count - 1);
 
-	_age.resize(num_col, iteration_count - 1);
+    for (uint32_t i = 0; i < _rmp->getNumRow(); ++i) {
+        uint32_t idx = basis[i];
 
-    for (int i = _rmp->getNumRow() - 1; i >= 0; --i) {
-        if (basis[i] < num_col) {
-            _age[basis[i]] = iteration_count;
+        // include all basis columns, even if they have zero value
+        // this helps reduce number of simplex pivots
+        if (idx < num_col) {
+            bool non_zero = solution.col_value[idx] > 1e-6;
+            _age[idx] = iteration_count + non_zero;
+            basis_size += non_zero;
         }
     }
 
-	// remove old columns if we've got too many
-    if (num_col > MAX_COLS && iteration_count > AGE_THRESHOLD) {
-        const int can_remove = num_col - MIN_COLS;
-		const int age_threshold = iteration_count - AGE_THRESHOLD;
-        
-        std::vector<int> indices_to_remove;
-        indices_to_remove.reserve(can_remove);
+    // remove old columns if we've got too many, but only if we have made progress
+    const uint32_t MAX_COLS = _params->max_col_multiplier * _rmp->getNumRow();
 
-		// columns with earlier index are likely older, so if we hit the `can_remove` limit, 
-        // we stop but are likely to remove the older ones anyhow
-		for (int i = 0; i < num_col && indices_to_remove.size() < can_remove; ++i) {
-            if (_age[i] < age_threshold) {
+    if (num_col > MAX_COLS && iteration_count > _params->age_limit) {
+		const uint32_t age_limit = iteration_count - _params->age_limit;
+        std::vector<int> indices_to_remove;
+
+		for (uint32_t i = 0; i < num_col; ++i) {
+            if (_age[i] < age_limit) {
                 indices_to_remove.emplace_back(i);
             }
 		}
 
-        // remove the columns from model and from _age
-        // reverse order to preserve correct index
+        // remove the columns from model and from _age, reverse order to preserve correct index
 		for (auto it = indices_to_remove.crbegin(); it != indices_to_remove.crend(); ++it) {
 			_age.erase(_age.begin() + *it);
 		}
-        _rmp->deleteCols(indices_to_remove.size(), indices_to_remove.data());
+        _rmp->deleteCols(static_cast<int>(indices_to_remove.size()), indices_to_remove.data());
     }
 }
 
@@ -108,7 +107,6 @@ int GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
     auto model = SetCoverRestrictedProblem(instance.jobs, instance.machines, ObjSense::kMinimize);
     rmp->passModel(model);
     pricer.init(rmp.get(), &instance);
-    column_management.init(rmp.get(), &instance, params);
 
     // initialize pricing
     pricing.init(instance);
@@ -122,7 +120,7 @@ int GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
 
     double _rmpLB = rmp->getObjectiveValue();
     updateCompactSolution();
-    tbl.output(0, 0, iteration_count, _LB, _UB, "-", _rmpLB, "-", basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count, prune_count, leaf_count);
+    tbl.output(0, 0, iteration_count, _LB, _UB, "-", _rmpLB, "-", basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
     csv_writer.append_row(instance.name, pricer.name, 0, 0, iteration_count, _LB, _UB, "", _rmpLB, "", basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", -1);
 
     // primal simplex for warm-start "add columns"
@@ -131,8 +129,7 @@ int GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
     //rmp->setOptionValue(kSolverString, kIpmString);
     //rmp->setOptionValue(kRunCrossoverString, kHighsOffString);
     pricer.init_feasible();
-
-    size_t node_count = 0;
+    column_management.init(rmp.get(), &instance, params);
 
     if (params.nodes > 0) {
         do {
@@ -174,7 +171,7 @@ cg_time.pause();
             csv_writer.append_row(instance.name, pricer.name, 0, 0, iteration_count, _LB, _UB, gap * 100, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", 0);
 
             if (iteration_count % ITERATION_OUTPUT == 0 && total_time.TotalSeconds() - previous_logging_time > ITERATION_TIME) {
-                tbl.output(0, 0, iteration_count, _LB, _UB, gap * 100, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count, prune_count, leaf_count);
+                tbl.output(0, 0, iteration_count, _LB, _UB, gap * 100, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
                 previous_logging_time = total_time.TotalSeconds();
             }
 
@@ -187,9 +184,8 @@ cg_time.pause();
 
 	double lb = std::ceil(_LB - 1e-6);
     double gap = std::abs(100.0 * (_UB - lb) / _UB);
-    tbl.output(0, 0, iteration_count, lb, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count, prune_count, leaf_count);
+    tbl.output(0, 0, iteration_count, lb, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
     csv_writer.append_row(instance.name, pricer.name, 0, 0, iteration_count, _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", 1);
-    csv_writer.append_row(instance.name, pricer.name, node_count, 0, iteration_count, _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", 4);
 
     std::cout << std::format("\n"
 		"Inst : {}\n"
@@ -253,7 +249,7 @@ cg_time.pause();
 
         // debugging
         if (iteration_count % ITERATION_OUTPUT == 0 && total_time.TotalSeconds() - previous_logging_time > ITERATION_TIME && has_dual_ray) {
-            tbl.output("", "", iteration_count, _LB, "-", "-", "-", "-", "-", rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count, prune_count, leaf_count);
+            tbl.output("", "", iteration_count, _LB, "-", "-", "-", "-", "-", rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
             previous_logging_time = total_time.TotalSeconds();
         }
 
@@ -321,14 +317,17 @@ double GapSolver::remove_duplicates() {
     const auto& solution = rmp->getSolution();
     const HighsInt* basis = rmp->getBasicVariablesArray();
     const HighsInt num_col = rmp->getNumCol();
+	const int basis_size = rmp->getNumRow();
 
     // assume unlikely to have duplicates
 	bool has_duplicates = false;
     std::vector<bool> has_job(instance.jobs, false);
 
-    for (int i = rmp->getNumRow() - 1; i >= 0; --i) {
-        if (basis[i] < num_col && solution.col_value[basis[i]] > 1e-6) {
-            for (auto it = col_begin(*rmp, basis[i]), end = --col_end(*rmp, basis[i]); it != end; ++it) {
+    for (int i = 0; i < basis_size; ++i) {
+        int idx = basis[i];
+
+        if (idx < num_col && solution.col_value[idx] > 1e-6) {
+            for (auto it = col_begin(*rmp, idx), end = --col_end(*rmp, idx); it != end; ++it) {
 				has_duplicates |= has_job[*it];
                 has_job[*it] = true;
             }
@@ -400,7 +399,7 @@ double GapSolver::remove_duplicates() {
             if (updated_machines[m]) {
                 double cost = sum(machine_jobs[m], 0.0, instance.profit[m]);
                 machine_jobs[m].push_back(instance.jobs + m);
-                rmp->addCol(cost, 0, kHighsInf, machine_jobs[m].size(), machine_jobs[m].data(), _ones.data());
+                rmp->addCol(cost, 0, kHighsInf, static_cast<int>(machine_jobs[m].size()), machine_jobs[m].data(), _ones.data());
             }
         }
 
@@ -416,15 +415,11 @@ bool GapSolver::add_columns(std::vector<double>& reduced_costs) {
         auto& profit = instance.profit[m];
 
         if (reduced_costs[m] > 1e-6) {
-            std::stable_sort(pricing[m].solution.begin(), pricing[m].solution.end()); // ensure columns are sorted for faster search
+			auto& solution = pricing[m].solution;
+            std::stable_sort(solution.begin(), solution.end()); // ensure columns are sorted for faster search
+            double cost = sum(solution.begin(), --solution.end(), 0.0, profit);
 
-            double cost = 0;
-
-			for (int i = 0, size = pricing[m].solution.size() - 1; i < size; ++i) {
-				cost += profit[pricing[m].solution[i]];
-			}
-
-            rmp->addCol(cost, 0, kHighsInf, pricing[m].solution.size(), pricing[m].solution.data(), _ones.data());
+            rmp->addCol(cost, 0, kHighsInf, static_cast<int>(pricing[m].solution.size()), pricing[m].solution.data(), _ones.data());
             any = true;
         }
     }

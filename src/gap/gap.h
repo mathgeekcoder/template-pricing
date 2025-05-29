@@ -10,9 +10,9 @@
 #include "highs/parallel/HighsParallel.h"
 #include "highs/Highs.h"
 #include "pricers/dantzig.h"
-#include "pricers/mip_template.h"
 #include "pricers/wentges.h"
-#include "pricers/wentges_template.h"
+#include "pricers/mip_template.h"
+#include "pricers/lagrange_template.h"
 #include "pricers/farkas.h"
 
 struct CsvSchema {
@@ -23,20 +23,17 @@ struct CsvSchema {
 struct AgeColumnManagement {
     Highs* _rmp = nullptr;
     const GapInstance* _instance = nullptr;
-    int MIN_COLS = 0;
-    int MAX_COLS = 0;
+	const Parameters* _params = nullptr;
     std::vector<uint32_t> _age;
 
     void init(Highs* rmp, const GapInstance* instance, const Parameters& params) {
         _rmp = rmp;
         _instance = instance;
 		_age.resize(_rmp->getNumCol(), 0);
-
-        MIN_COLS = params.min_col_factor * _rmp->getNumRow();
-        MAX_COLS = params.max_col_factor * _rmp->getNumRow();
+		_params = &params;
     }
 
-    void reduce(size_t iteration_count);
+    void reduce(uint32_t iteration_count);
 };
 
 
@@ -44,12 +41,10 @@ struct GapSolver {
     static constexpr int ITERATION_OUTPUT = 5;
     static constexpr double ITERATION_TIME = 1;
 
-    int basis_size = 0;
-    size_t iteration_count = 0;
+    uint32_t basis_size = 0;
+    uint32_t iteration_count = 0;
     size_t lp_iteration_count = 0;
 	size_t fractional_count = 0;
-	size_t prune_count = 0;
-	size_t leaf_count = 0;
     double _LB = -kHighsInf;
     double _UB = kHighsInf;
     double previous_logging_time = -1;
@@ -91,8 +86,6 @@ struct GapSolver {
         tbl.add_column("Time", 10, 1);
         tbl.add_column("Lp #Its", 11);
         tbl.add_column("#Frac", 7);
-        tbl.add_column("#Prune", 7);
-        tbl.add_column("#Leaf", 7);
     }
 
     void presolve();

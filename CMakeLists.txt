@@ -1,4 +1,4 @@
-﻿cmake_minimum_required (VERSION 3.9.4)
+﻿cmake_minimum_required (VERSION 3.15)
 
 project("colgen_pricing" CXX)
 find_package(highs REQUIRED)
@@ -16,6 +16,7 @@ check_ipo_supported(RESULT supported OUTPUT error)
 
 if(supported)
     message(STATUS "IPO / LTO enabled")
+    set_property(TARGET colgen_pricing PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 else()
     message(STATUS "IPO / LTO not supported: <${error}>")
 endif()

@@ -1,6 +1,6 @@
-#include "wentges_template.h"
+#include "lagrange_template.h"
 
-double WentgesTemplatePrice::optimize(const std::vector<double>& duals, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs, bool update_duals) {
+double LagrangeTemplatePrice::optimize(const std::vector<double>& duals, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs, bool update_duals) {
     std::vector<double> rc(_instance->machines, 0);
 
     highs::parallel::for_each(0, _instance->machines, [&](HighsInt start, HighsInt end) {
@@ -34,7 +34,7 @@ double WentgesTemplatePrice::optimize(const std::vector<double>& duals, PricingB
     return optimal_pricing;
 }
 
-double WentgesTemplatePrice::optimize_lagrangian(const std::vector<double>& template_obj, const std::vector<double>& obj, double offset, GapPricing& pricer, double& hi_mu) {
+double LagrangeTemplatePrice::optimize_lagrangian(const std::vector<double>& template_obj, const std::vector<double>& obj, double offset, GapPricing& pricer, double& hi_mu) {
     double ub = _instance->jobs;
     double best = -_instance->jobs;
     double best_rc = 0;

@@ -97,15 +97,24 @@ int main(int argc, char* argv[])
                 params.random_seed = static_cast<int>(std::time(nullptr)) + replication;
 				std::cout << "Random seed: " << params.random_seed << std::endl;
 
-                if (pricing_method == "mip_template")
+                if (pricing_method == "mip_template") {
+                    params.max_col_multiplier = 2;
+                    params.age_limit = 75;
                     result = run_gap<TemplatePrice, TemplateFarkas>(params, filename, csv_writer);
-                else if (pricing_method == "wentges_template")
-                    result = run_gap<WentgesTemplatePrice, WentgesTemplateFarkas>(params, filename, csv_writer);
-                else if (pricing_method == "wentges")
+                }
+                else if (pricing_method == "lagrange_template") {
+                    params.max_col_multiplier = 1;
+                    params.age_limit = 5;
+                    result = run_gap<LagrangeTemplatePrice, LagrangeTemplateFarkas>(params, filename, csv_writer);
+                }
+                else if (pricing_method == "wentges") {
+                    params.max_col_multiplier = 2;
+                    params.age_limit = 10;
                     result = run_gap<WentgesPrice, DantzigFarkas>(params, filename, csv_writer);
+                }
                 else if (pricing_method == "dantzig") {
-                    params.min_col_factor = 3;
-                    params.max_col_factor = 6;
+                    params.max_col_multiplier = 5;
+                    params.age_limit = 250;
                     result = run_gap<DantzigPrice, DantzigFarkas>(params, filename, csv_writer);
                 }
 

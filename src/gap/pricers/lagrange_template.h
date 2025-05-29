@@ -1,8 +1,8 @@
 #pragma once
 #include "gap/gap_pricing.h"
 
-struct WentgesTemplatePrice {
-    static constexpr const char* name = "WentgesTemplate";
+struct LagrangeTemplatePrice {
+    static constexpr const char* name = "LagrangeTemplate";
 
     Highs* _rmp = nullptr;
     GapInstance* _instance = nullptr;

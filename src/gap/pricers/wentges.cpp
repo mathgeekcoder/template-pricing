@@ -10,7 +10,7 @@ double norm(const std::vector<double>& a) {
 
 double norm(const std::vector<double>& a, const std::vector<double>& b) {
 	double norm = 0;
-    for (int i = a.size() - 1; i >= 0; --i) {
+    for (size_t i = 0, end = a.size(); i < end; ++i) {
 		norm += (a[i] - b[i]) * (a[i] - b[i]);
 	}
 	return std::sqrt(norm);

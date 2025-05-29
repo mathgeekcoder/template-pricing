@@ -50,7 +50,7 @@ HighsModel SetPartitionRestrictedProblem(uint32_t partitions, uint32_t blocks, O
 HighsModel SetCoverRestrictedProblem(uint32_t partitions, uint32_t blocks, ObjSense sense);
 
 struct TemplatePricing {
-	int _blocks = 0, _partitions = 0;
+	size_t _blocks = 0, _partitions = 0;
 	std::vector<std::vector<double>> _template_columns;
 
 	const std::vector<double>& operator[](int i) const {
@@ -78,7 +78,7 @@ struct TemplatePricing {
 		_blocks = template_columns.size();
 		_partitions = partitions;
 
-		for (int block = template_columns.size() - 1; block >= 0; --block) {
+		for (size_t block = 0, end = template_columns.size(); block < end; ++block) {
 			for (int index : template_columns[block]) {
 				_template_columns[block][index] = 1;
 			}
@@ -98,18 +98,14 @@ struct TemplatePricing {
 		}
 
 		// assumes lp colwise
-		for (int i = solution.col_value.size() - 1; i >= 0; --i) {
+		for (size_t i = 0, end = solution.col_value.size(); i < end; ++i) {
 			if (solution.col_value[i] > 1e-6) {
 				auto start = col_begin(highs, i);
-				auto end = col_end(highs, i);
-
-				auto block_index = std::max_element(start, end);
-				auto& template_block = _template_columns[*block_index - _partitions];
+				auto end = --col_end(highs, i);  // assume last element is the block index
+				auto& template_block = _template_columns[*end - _partitions];
 
 				for (auto it = start; it != end; ++it) {
-					if (it != block_index) {
-						template_block[*it] += solution.col_value[i];
-					}
+					template_block[*it] += solution.col_value[i];
 				}
 			}
 		}

@@ -97,7 +97,7 @@ inline std::string join(const std::vector<std::string>& v, const std::string& de
     if (v.empty())
         return std::string();
 
-    int size = delim.size() * (v.size() - 1);
+    size_t size = delim.size() * (v.size() - 1);
     for (int i = 0; i < v.size(); ++i) {
 		size += v[i].size();
     }
@@ -118,7 +118,7 @@ inline std::string join(const std::vector<int>& v, const std::string& delim) {
     if (v.empty())
         return std::string();
 
-    int size = delim.size() * (v.size() - 1);
+    size_t size = delim.size() * (v.size() - 1);
     for (int i = 0; i < v.size(); ++i) {
         size += baseTenDigits(abs(v[i])) + (v[i] < 0); // number of digits + possible minus sign
     }
@@ -194,7 +194,7 @@ class ColumnAlignOutput {
            std::format_to(std::back_inserter(_output), "{:>{}}", "-", _width[index]);
        }
        // if decimal number is larger than width, then use scientific notation
-       else if (baseTenDigits(abs(a)) + _precision[index] + 3 > _width[index]) {
+       else if (baseTenDigits(static_cast<uint64_t>(abs(a))) + static_cast<uint32_t>(_precision[index] + 3) > static_cast<uint32_t>(_width[index])) {
            std::format_to(std::back_inserter(_output), "{:>{}.{}e}", a, _width[index], _width[index] - 8);
        }
        else {
@@ -283,12 +283,12 @@ static std::string replaceAll(std::string str, const std::string from, const std
     return str;
 }
 
-static std::vector<HighsInt>::const_iterator col_begin(const Highs& highs, int col) {
+static std::vector<HighsInt>::const_iterator col_begin(const Highs& highs, size_t col) {
     auto& lp = highs.getLp();
     return lp.a_matrix_.index_.begin() + lp.a_matrix_.start_[col];
 }
 
-static std::vector<HighsInt>::const_iterator col_end(const Highs& highs, int col) {
+static std::vector<HighsInt>::const_iterator col_end(const Highs& highs, size_t col) {
     auto& lp = highs.getLp();
     return lp.a_matrix_.index_.begin() + lp.a_matrix_.start_[col + 1];
 }
@@ -312,7 +312,7 @@ struct MemoryUsage {
     std::string bytes_to_string(size_t bytes) {
         static const std::vector<std::string> SIZES = { " B", " KB", " MB", " GB" };
         int index = 0;
-        double size = bytes;
+        double size = static_cast<double>(bytes);
 
         while (size >= 1024 && index < SIZES.size()) {
             size /= 1024.0;
@@ -476,6 +476,13 @@ static void read_csv_file(std::string& filename, bool skipHeader, std::function<
 template <typename Container, typename T, typename Lookup>
 T sum(const Container& container, T init, Lookup& op) {
     return std::accumulate(container.begin(), container.end(), init, [&](T acc, const auto& elem) {
+        return acc + op[elem];
+    });
+}
+
+template <typename Iterator, typename T, typename Lookup>
+T sum(Iterator begin, Iterator end, T init, Lookup& op) {
+    return std::accumulate(begin, end, init, [&](T acc, const auto& elem) {
         return acc + op[elem];
     });
 }

@@ -18,8 +18,7 @@
           "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
           "type": "FILEPATH"
         },
-        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>",
-        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": true
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
       },
       "condition": {
         "type": "equals",
@@ -96,8 +95,7 @@
         "CMAKE_TOOLCHAIN_FILE": {
           "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
           "type": "FILEPATH"
-        },
-        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": true
+        }
       },
       "condition": {
         "type": "equals",
@@ -115,11 +113,5 @@
       }
     }
   ],
-  "buildPresets": [
-    {
-      "name": "windows-release",
-      "configurePreset": "windows-release",
-      "configuration": "Release"
-    }
-  ]
+  "buildPresets": [  ]
 }
