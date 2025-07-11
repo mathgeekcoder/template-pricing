@@ -73,8 +73,6 @@ struct GapSolver {
 		_compact_solution.assign(instance.jobs * instance.machines, 0);
 
 		tbl.show_output = params.show_output;
-        tbl.add_column("#Nodes", 7);
-        tbl.add_column("#UnExp", 7);
         tbl.add_column("#Its", 7);
         tbl.add_column("LB", 14, 2);
         tbl.add_column("UB", 14, 2);
