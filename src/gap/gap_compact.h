@@ -4,14 +4,14 @@
 #include "highs/Highs.h"
 #include <ctime>
 
-struct gap_compact {
+struct GapCompact {
 	GapInstance& _instance;
 	HighsSolution _solution;
 	size_t iterations = 0;
 	std::unique_ptr<Highs> highs;
 
 public:	
-	gap_compact(GapInstance& instance) : _instance(instance) {
+	GapCompact(GapInstance& instance) : _instance(instance) {
 		highs = std::make_unique<Highs>();
 	}
 

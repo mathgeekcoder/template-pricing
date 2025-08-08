@@ -15,11 +15,6 @@
 #include "pricers/lagrange_template.h"
 #include "pricers/farkas.h"
 
-struct CsvSchema {
-    static constexpr char const* header = "instance,algorithm,nodes,unexplored,iterations,lb,ub,gap,obj,redcost,basis,cols,rmptime,cgtime,time,lpiters,delta,last";
-    static constexpr char const* format = "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}";
-};
-
 struct AgeColumnManagement {
     Highs* _rmp = nullptr;
     const GapInstance* _instance = nullptr;
@@ -63,7 +58,7 @@ struct GapSolver {
     ColumnAlignOutput tbl;
     AgeColumnManagement column_management;
     PricingBlockVector<GapPricing> pricing;
-    gap_compact lp;
+    GapCompact lp;
 
     GapSolver(std::string filename, const Parameters& params, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer)
         : instance(filename), params(params), csv_writer(csv_writer), pricing(instance.machines), lp(instance) {

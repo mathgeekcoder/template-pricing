@@ -11,7 +11,7 @@ struct DantzigFarkas {
     GapInstance* _instance = nullptr;
 
     template <typename Pricer>
-    void init(Pricer& pricer, PricingBlockVector<GapPricing>& pricing, gap_compact& lp) {
+    void init(Pricer& pricer, PricingBlockVector<GapPricing>& pricing, GapCompact& lp) {
         _instance = pricer._instance;
     }
 
@@ -32,7 +32,7 @@ struct LagrangeTemplateFarkas {
     LagrangeTemplatePrice _template;
 
     template <typename Pricer>
-    void init(Pricer& pricer, PricingBlockVector<GapPricing>& pricing, gap_compact& lp) {
+    void init(Pricer& pricer, PricingBlockVector<GapPricing>& pricing, GapCompact& lp) {
         _instance = pricer._instance;
         _template.init(pricer._rmp, _instance);
 
@@ -64,7 +64,7 @@ struct TemplateFarkas {
     std::unique_ptr<PricingBlockVector<GapPricingMIP>> _mip;
 
     template <typename Pricer>
-    void init(Pricer& pricer, PricingBlockVector<GapPricing>& pricing, gap_compact& lp) {
+    void init(Pricer& pricer, PricingBlockVector<GapPricing>& pricing, GapCompact& lp) {
         _instance = pricer._instance;
         _template.init(_instance->machines, _instance->jobs);
         _mip.reset(new PricingBlockVector<GapPricingMIP>(_instance->machines));

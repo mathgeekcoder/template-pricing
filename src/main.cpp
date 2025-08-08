@@ -20,6 +20,37 @@ int run_gap(const Parameters& params, const fs::path& filename, quill::CsvWriter
     return GapSolver(filename.string(), params, csv_writer).solve<Pricer, PricerFarkas>();
 }
 
+int solve_gap(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer, std::string& pricing_method, int replication) {
+    Parameters params;
+    params.random_seed = static_cast<int>(std::time(nullptr)) + replication;
+    std::cout << "Random seed: " << params.random_seed << std::endl;
+
+    if (pricing_method == "mip_template") {
+        params.max_col_multiplier = 2;
+        params.age_limit = 75;
+        return run_gap<TemplatePrice, TemplateFarkas>(params, filename, csv_writer);
+    }
+    else if (pricing_method == "lagrange_template") {
+        params.max_col_multiplier = 1;
+        params.age_limit = 5;
+        return run_gap<LagrangeTemplatePrice, LagrangeTemplateFarkas>(params, filename, csv_writer);
+    }
+    else if (pricing_method == "wentges") {
+        params.max_col_multiplier = 2;
+        params.age_limit = 10;
+        return run_gap<WentgesPrice, DantzigFarkas>(params, filename, csv_writer);
+    }
+    else if (pricing_method == "dantzig") {
+        params.max_col_multiplier = 5;
+        params.age_limit = 250;
+        return run_gap<DantzigPrice, DantzigFarkas>(params, filename, csv_writer);
+    }
+    else {
+        std::cerr << "Unsupported pricing method: " << pricing_method << std::endl;
+        return 0;
+	}
+}
+
 
 // An example of reoptimization within a branch-and-price framework.
 int main(int argc, char* argv[])
@@ -93,29 +124,13 @@ int main(int argc, char* argv[])
                 quill::CsvWriter<CsvSchema, quill::FrontendOptions> csv_writer(filename.filename().string() + "-" + pricing_method + "-output-" + std::to_string(replication) + ".csv");
 
                 int result = 0;
-                Parameters params;
-                params.random_seed = static_cast<int>(std::time(nullptr)) + replication;
-				std::cout << "Random seed: " << params.random_seed << std::endl;
 
-                if (pricing_method == "mip_template") {
-                    params.max_col_multiplier = 2;
-                    params.age_limit = 75;
-                    result = run_gap<TemplatePrice, TemplateFarkas>(params, filename, csv_writer);
+                if (filename.extension() == "") {
+                    result = solve_gap(filename, csv_writer, pricing_method, replication);
                 }
-                else if (pricing_method == "lagrange_template") {
-                    params.max_col_multiplier = 1;
-                    params.age_limit = 5;
-                    result = run_gap<LagrangeTemplatePrice, LagrangeTemplateFarkas>(params, filename, csv_writer);
-                }
-                else if (pricing_method == "wentges") {
-                    params.max_col_multiplier = 2;
-                    params.age_limit = 10;
-                    result = run_gap<WentgesPrice, DantzigFarkas>(params, filename, csv_writer);
-                }
-                else if (pricing_method == "dantzig") {
-                    params.max_col_multiplier = 5;
-                    params.age_limit = 250;
-                    result = run_gap<DantzigPrice, DantzigFarkas>(params, filename, csv_writer);
+                else {
+                    std::cerr << "Unsupported file format: " << filename.extension() << std::endl;
+                    return -1;
                 }
 
                 // if failure: repeat replication
