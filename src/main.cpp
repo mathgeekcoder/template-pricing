@@ -8,6 +8,7 @@
 #include <locale>
 #include "parameters.h"
 #include "gap/gap.h"
+#include "bppc/bppc.h"
 #include "quill/Backend.h"
 #include <ctime>
 
@@ -49,6 +50,33 @@ int solve_gap(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::Front
         std::cerr << "Unsupported pricing method: " << pricing_method << std::endl;
         return 0;
 	}
+}
+
+template <typename Pricer>
+int run_bppc(const Parameters& params, const fs::path& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer) {
+    std::cout << filename.filename().string() << " " + std::string(Pricer::name) << std::endl;
+    return BppcSolver(filename.string(), params, csv_writer).solve<Pricer>();
+}
+
+int solve_bppc(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer, std::string& pricing_method, int replication) {
+    Parameters params;
+    params.random_seed = replication;// static_cast<int>(std::time(nullptr)) + replication;
+    std::cout << "Random seed: " << params.random_seed << std::endl;
+
+    if (pricing_method == "mip_template") {
+        params.max_col_multiplier = 2;
+        params.age_limit = 75;
+        return run_bppc<BppcTemplatePrice>(params, filename, csv_writer);
+    }
+    else if (pricing_method == "dantzig") {
+        params.max_col_multiplier = 5;
+        params.age_limit = 250;
+        return run_bppc<BppcDantzigPrice>(params, filename, csv_writer);
+    }
+    else {
+        std::cerr << "Unsupported pricing method: " << pricing_method << std::endl;
+	    return 0;
+    }
 }
 
 
@@ -127,6 +155,9 @@ int main(int argc, char* argv[])
 
                 if (filename.extension() == "") {
                     result = solve_gap(filename, csv_writer, pricing_method, replication);
+                }
+                else if (filename.extension() == "txt") {
+					result = solve_bppc(filename, csv_writer, pricing_method, replication);
                 }
                 else {
                     std::cerr << "Unsupported file format: " << filename.extension() << std::endl;
