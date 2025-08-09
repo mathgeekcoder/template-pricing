@@ -193,35 +193,36 @@ int main(int argc, char* argv[]) {
 
     fs::path current_path(input);
 
-    taskflow.for_each(filePaths.begin(), filePaths.end(), [&](const fs::path& filename) {
-        int retries = 5;
-        for (int replication = 1; replication <= num_replications; ++replication) {
-			std::string log_filename = std::format("{}-{}-{}-output-{}.log", filename.filename().string(), method, keep_cols, replication);
+    for (int replication = 1; replication <= num_replications; ++replication) {
+        taskflow.for_each(filePaths.begin(), filePaths.end(), [&, replication](const fs::path& filename) {
+			std::string log_filename = std::format("{}-{}-{}-output-{}.csv", filename.filename().string(), method, keep_cols, replication);
             quill::CsvWriter<CsvSchema, quill::FrontendOptions> csv_writer(log_filename);
 
             int result = 0;
 
-            // GAP instances
-            if (filename.extension() == "") {
-                result = solve_gap(filename, csv_writer, method, seed, replication, keep_cols, num_threads);
-                std::cout << std::endl;
-            }
-            else {
-                std::cerr << "Unsupported file format: " << filename.extension() << std::endl;
-                return -1;
-            }
-
             // if failure: repeat replication (e.g., basis bug in HiGHS)
-            if (result != 0) {
-                if (--retries < 0) {
-                    exit(-1);
+            for (int retries = 20; retries >= 0; --retries) {
+                // GAP instances
+                if (filename.extension() == "") {
+                    result = solve_gap(filename, csv_writer, method, seed, replication, keep_cols, num_threads);
+                    std::cout << std::endl;
                 }
-                --replication;
-            }
-        }
+                else {
+                    std::cerr << "Unsupported file format: " << filename.extension() << std::endl;
+                    break;
+                }
 
-        return 0;
-    });
+                if (result == 0) {
+                    break;
+                }
+            }
+
+            // delete output
+            if (result != 0) {
+                std::remove(log_filename.c_str());
+            }
+        });
+    }
 
 	executor.run(std::move(taskflow)).wait();
 
