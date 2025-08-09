@@ -20,13 +20,14 @@ struct TemplatePrice {
 
     Highs* _rmp = nullptr;
     GapInstance* _instance = nullptr;
+	tf::Executor* _executor = nullptr;
     TemplatePricing _template;
     std::unique_ptr<PricingBlockVector<GapPricingMIP>> _mip;
 
     TemplatePrice() = default;
     TemplatePrice(const TemplatePrice& copy);
 
-    void init(Highs* rmp, GapInstance* instance);
+    void init(tf::Executor* executor, Highs* rmp, GapInstance* instance);
     double optimize(const std::vector<double>& duals, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs);
 
     void update() {

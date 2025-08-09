@@ -106,28 +106,31 @@ TemplatePrice::TemplatePrice(const TemplatePrice& copy) {
     _mip->init(*_instance);
 }
 
-void TemplatePrice::init(Highs* rmp, GapInstance* instance) {
+void TemplatePrice::init(tf::Executor* executor, Highs* rmp, GapInstance* instance) {
     _rmp = rmp;
     _instance = instance;
+	_executor = executor;
     _template.init(instance->machines, instance->jobs);
     _mip.reset(new PricingBlockVector<GapPricingMIP>(instance->machines));
     _mip->init(*instance);
 }
 
 double TemplatePrice::optimize(const std::vector<double>& duals, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs) {
-    highs::parallel::for_each(0, _instance->machines, [&](HighsInt start, HighsInt end) {
+	tf::Taskflow taskflow;
+
+    taskflow.for_each_index(0, _instance->machines, 1, [&](int m) {
         std::vector<double> obj(_instance->jobs);
 
-        for (int m = start; m < end; ++m) {
-            for (int j = 0; j < _instance->jobs; ++j) {
-                obj[j] = duals[j] - _instance->profit[m][j];
-            }
-
-            reduced_costs[m] = _mip->_pricing[m].optimize_template(_template[m], obj, duals[_instance->jobs + m]);
-            pricing[m].solution.swap(_mip->_pricing[m].solution);
-            pricing[m].solution.push_back(_instance->jobs + m);
+        for (int j = 0; j < _instance->jobs; ++j) {
+            obj[j] = duals[j] - _instance->profit[m][j];
         }
+
+        reduced_costs[m] = _mip->_pricing[m].optimize_template(_template[m], obj, duals[_instance->jobs + m]);
+        pricing[m].solution.swap(_mip->_pricing[m].solution);
+        pricing[m].solution.push_back(_instance->jobs + m);
     });
+
+	_executor->run(std::move(taskflow)).wait();
 
     double optimal_pricing = 0.0;
 

@@ -2,12 +2,15 @@
 #include <numeric>
 
 struct Parameters {
-	bool show_output = true;
-	double timeout = 14400;  // 4 hours
-	double gap = 0.00001;
-	int nodes = 1; // std::numeric_limits<int>::max(); // max no limit, 1 root node, ...
-	int random_seed = 0;
+	double timeout = 21600;  // 6 hours
+	double gap = 0.00001;	 // 0.001% gap
 	double max_col_multiplier = 1;
 	double age_limit = 1;
+
+	int random_seed = 0;
+	uint8_t nodes = 1; // 0 for farkas, 1 for root node (> 0 for branching, support has been removed)
+	uint8_t num_threads = 1;
+	bool show_output = true;
+	std::string column_retention = "low"; // Options: low, med, high
 };
 

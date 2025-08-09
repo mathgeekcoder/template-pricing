@@ -81,6 +81,7 @@ void GapSolver::presolve() {
 
 template <typename PricerType, typename FarkasPricerType>
 int GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
+    highs::parallel::initialize_scheduler(1);
     total_time.start();
     tbl.write_header();
 
@@ -107,11 +108,11 @@ int GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
 
     auto model = SetCoverRestrictedProblem(instance.jobs, instance.machines, ObjSense::kMinimize);
     rmp->passModel(model);
-    pricer.init(rmp.get(), &instance);
+    pricer.init(&_executor, rmp.get(), &instance);
 
     // initialize pricing
     pricing.init(instance);
-    pricer_farkas.init(pricer, pricing, lp);
+    pricer_farkas.init(&_executor, pricer, pricing, lp);
 
     double optimal_pricing = 0.0;
     bool any = false;
@@ -122,7 +123,7 @@ int GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
     double _rmpLB = rmp->getObjectiveValue();
     updateCompactSolution();
     tbl.output(iteration_count, _LB, _UB, "-", _rmpLB, "-", basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
-    csv_writer.append_row(instance.name, pricer.name, 0, 0, iteration_count, _LB, _UB, "", _rmpLB, "", basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", -1);
+    csv_writer.append_row(instance.name, pricer.name, params.column_retention, iteration_count, _LB, _UB, "", _rmpLB, "", basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", -1);
 
     // primal simplex for warm-start "add columns"
     rmp->setOptionValue("simplex_strategy", "4");
@@ -169,7 +170,7 @@ cg_time.pause();
                 break;
 
             // logging
-            csv_writer.append_row(instance.name, pricer.name, 0, 0, iteration_count, _LB, _UB, gap * 100, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", 0);
+            csv_writer.append_row(instance.name, pricer.name, params.column_retention, iteration_count, _LB, _UB, gap * 100, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", 0);
 
             if (iteration_count % ITERATION_OUTPUT == 0 && total_time.TotalSeconds() - previous_logging_time > ITERATION_TIME) {
                 tbl.output(iteration_count, _LB, _UB, gap * 100, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
@@ -186,7 +187,7 @@ cg_time.pause();
 	double lb = std::ceil(_LB - 1e-6);
     double gap = std::abs(100.0 * (_UB - lb) / _UB);
     tbl.output(iteration_count, lb, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
-    csv_writer.append_row(instance.name, pricer.name, 0, 0, iteration_count, _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", 1);
+    csv_writer.append_row(instance.name, pricer.name, params.column_retention, iteration_count, _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", 1);
 
     std::cout << std::format("\n"
 		"Inst : {}\n"

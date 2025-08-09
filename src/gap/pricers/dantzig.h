@@ -6,17 +6,22 @@ struct DantzigPrice {
 
     Highs* _rmp = nullptr;
     GapInstance* _instance = nullptr;
+    tf::Executor* _executor = nullptr;
 
-    void init(Highs* rmp, GapInstance* instance) {
+    void init(tf::Executor* executor, Highs* rmp, GapInstance* instance) {
+		_executor = executor;
         _rmp = rmp;
         _instance = instance;
     }
 
     double optimize(const std::vector<double>& duals, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs) {
-        highs::parallel::for_each(0, _instance->machines, [&](HighsInt start, HighsInt end) {
+		tf::Taskflow taskflow;
+        tf::IndexRange range(0, _instance->machines, 1);
+
+        taskflow.for_each_by_index(range, [&](tf::IndexRange<int> subrange) {
             std::vector<double> obj(_instance->jobs);
 
-            for (int m = start; m < end; ++m) {
+            for (int m = subrange.begin(); m < subrange.end(); m += subrange.step_size()) {
                 for (int j = 0; j < _instance->jobs; ++j) {
                     obj[j] = duals[j] - _instance->profit[m][j];
                 }
@@ -25,6 +30,8 @@ struct DantzigPrice {
                 pricing[m].solution.push_back(_instance->jobs + m);
             }
         });
+
+		_executor->run(std::move(taskflow)).wait();
 
         double optimal_pricing = 0.0;
 

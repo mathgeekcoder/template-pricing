@@ -2,6 +2,8 @@
 
 project("colgen_pricing" CXX)
 find_package(highs REQUIRED)
+find_package(argparse CONFIG REQUIRED)
+find_package(Taskflow CONFIG REQUIRED)
 find_path(QUILL_INCLUDE_DIRS "quill/Backend.h")
 
 # Any source files added to include/ or source/ will automatically be added to the project.

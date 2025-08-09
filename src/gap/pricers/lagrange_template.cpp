@@ -1,15 +1,20 @@
 #include "lagrange_template.h"
+#include "taskflow/taskflow.hpp"
+#include "taskflow/algorithm/for_each.hpp"
 
 double LagrangeTemplatePrice::optimize(const std::vector<double>& duals, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs, bool update_duals) {
     std::vector<double> rc(_instance->machines, 0);
 
-    highs::parallel::for_each(0, _instance->machines, [&](HighsInt start, HighsInt end) {
-        for (int m = start; m < end; ++m) {
-            std::vector<double> obj = duals;
+    tf::Taskflow taskflow;
+	tf::IndexRange range(0, _instance->machines, 1);
 
+    taskflow.for_each_by_index(range, [&](tf::IndexRange<int> subrange) {
+        std::vector<double> obj(_instance->jobs);
+
+        for (int m = subrange.begin(); m < subrange.end(); m += subrange.step_size()) {
             if (update_duals) {
                 for (int j = 0; j < _instance->jobs; ++j) {
-                    obj[j] -= _instance->profit[m][j];
+                    obj[j] = duals[j] - _instance->profit[m][j];
                 }
             }
 
@@ -24,7 +29,9 @@ double LagrangeTemplatePrice::optimize(const std::vector<double>& duals, Pricing
 
             pricing[m].solution.push_back(_instance->jobs + m);
         }
-    }, std::max(1, int(2 * _instance->machines / std::thread::hardware_concurrency())));
+    });
+
+	_executor->run(std::move(taskflow)).wait();
 
     double optimal_pricing = 0.0;
 

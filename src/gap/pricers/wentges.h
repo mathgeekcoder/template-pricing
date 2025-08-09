@@ -11,6 +11,7 @@ struct WentgesPrice {
 
     Highs* _rmp = nullptr;
     GapInstance* _instance = nullptr;
+    tf::Executor* _executor = nullptr;
     DantzigPrice dantzig;
 
     double best_reduced_cost = kHighsInf;
@@ -20,10 +21,11 @@ struct WentgesPrice {
     std::vector<double> dual_sep, dual_in;
     std::vector<double> g_sep, g_in;
 
-    void init(Highs* rmp, GapInstance* instance) {
-        dantzig.init(rmp, instance);
+    void init(tf::Executor* executor, Highs* rmp, GapInstance* instance) {
+        dantzig.init(executor, rmp, instance);
         _rmp = rmp;
         _instance = instance;
+		_executor = executor;
 
         dual_sep.resize(rmp->getNumRow(), 0);
         dual_in.resize(rmp->getNumRow(), 0);

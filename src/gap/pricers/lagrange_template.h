@@ -7,13 +7,15 @@ struct LagrangeTemplatePrice {
     Highs* _rmp = nullptr;
     GapInstance* _instance = nullptr;
     TemplatePricing _template;
+	tf::Executor* _executor;
     std::vector<double> _mu;
 
-    void init(Highs* rmp, GapInstance* instance) {
+    void init(tf::Executor* executor, Highs* rmp, GapInstance* instance) {
         _rmp = rmp;
         _instance = instance;
         _template.init(instance->machines, instance->jobs);
         _mu.resize(instance->machines, 1);
+		_executor = executor;
     }
 
     void update() {

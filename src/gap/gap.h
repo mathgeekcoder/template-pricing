@@ -14,6 +14,7 @@
 #include "pricers/mip_template.h"
 #include "pricers/lagrange_template.h"
 #include "pricers/farkas.h"
+#include "taskflow/taskflow.hpp"
 
 struct AgeColumnManagement {
     Highs* _rmp = nullptr;
@@ -45,6 +46,7 @@ struct GapSolver {
     double previous_logging_time = -1;
     Timer total_time, rmp_time, cg_time;
 
+	tf::Executor _executor;
     std::unique_ptr<Highs> rmp;
 
     const Parameters& params;
@@ -61,7 +63,7 @@ struct GapSolver {
     GapCompact lp;
 
     GapSolver(std::string filename, const Parameters& params, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer)
-        : instance(filename), params(params), csv_writer(csv_writer), pricing(instance.machines), lp(instance) {
+        : instance(filename), params(params), csv_writer(csv_writer), pricing(instance.machines), lp(instance), _executor(params.num_threads) {
 
         _ones.assign(instance.jobs + 1, 1);
         _reduced_costs.assign(instance.machines, 0);

@@ -2,8 +2,9 @@
 #include "gap_instance.h"
 #include "block/column_generation.h"
 #include "highs/Highs.h"
-#include "highs/parallel/HighsParallel.h"
 #include "extern/scip/scip_knapsack.h"
+#include "taskflow/taskflow.hpp"
+#include "taskflow/algorithm/for_each.hpp"
 
 struct GapPricing {
     size_t _machine = 0;

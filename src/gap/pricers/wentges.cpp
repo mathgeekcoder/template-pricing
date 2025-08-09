@@ -77,10 +77,13 @@ double WentgesPrice::optimize(const std::vector<double>& dual_out, PricingBlockV
         }
 
         // optimal pricing for bounds
-        highs::parallel::for_each(0, _instance->machines, [&](HighsInt start, HighsInt end) {
+		tf::Taskflow taskflow;
+        tf::IndexRange range(0, _instance->machines, 1);
+
+        taskflow.for_each_by_index(range, [&](tf::IndexRange<int> subrange) {
             std::vector<double> obj(_instance->jobs);
 
-            for (int m = start; m < end; ++m) {
+            for (int m = subrange.begin(); m < subrange.end(); m += subrange.step_size()) {
                 for (int j = 0; j < _instance->jobs; ++j) {
                     obj[j] = dual_sep[j] - _instance->profit[m][j];
                 }
@@ -94,7 +97,9 @@ double WentgesPrice::optimize(const std::vector<double>& dual_out, PricingBlockV
 
                 pricing[m].solution.push_back(_instance->jobs + m);
             }
-        }, std::max(1, int(2 * _instance->machines / std::thread::hardware_concurrency())));
+        });
+
+		_executor->run(std::move(taskflow)).wait();
 
         bool any = false;
 

@@ -3,6 +3,8 @@
   "version-string": "0",
   "dependencies": [
     "highs",
-    "quill"
+    "quill",
+    "argparse",
+    "taskflow"
   ]
 }
