@@ -219,6 +219,8 @@ int main(int argc, char* argv[]) {
                 --replication;
             }
         }
+
+        return 0;
     });
 
 	executor.run(std::move(taskflow)).wait();
