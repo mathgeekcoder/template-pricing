@@ -17,10 +17,6 @@
 namespace fs = std::filesystem;
 
 int solve_gap(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer, std::string& pricing_method, int seed, int replication, std::string keep_cols, int num_threads) {
-    Parameters params;
-    params.random_seed = (seed == -1 ? static_cast<int>(std::time(nullptr)) : seed) + replication;
-	params.num_threads = num_threads;
-
     if (keep_cols == "best") {
         if (pricing_method == "lagrange_template") {
             keep_cols = "low";
@@ -32,6 +28,11 @@ int solve_gap(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::Front
             keep_cols = "high";
         }
     }
+
+    Parameters params;
+    params.random_seed = (seed == -1 ? static_cast<int>(std::time(nullptr)) : seed) + replication;
+    params.num_threads = num_threads;
+    params.column_retention = keep_cols;
 
     if (keep_cols == "low") {
         params.age_limit = 5;
