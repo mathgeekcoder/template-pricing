@@ -5,7 +5,7 @@ import argparse
 
 def main():
     parser = argparse.ArgumentParser(description="Merge all CSV files for a given path")
-    parser.add_argument('pattern', nargs='?', default='*.csv', help="File pattern to match CSV files (default: '*.csv')")
+    parser.add_argument('pattern', nargs='+', default='*.csv', help="File pattern to match CSV files (default: '*.csv')")
     parser.add_argument('-o', '--output', default='join.csv', help="Output filename (default: 'join.csv')")
     args = parser.parse_args()
 
@@ -17,7 +17,7 @@ def main():
             print("Aborted. Output file not overwritten.")
             return
 
-    csv_files = [os.path.abspath(f) for f in glob.glob(args.pattern)]
+    csv_files = [os.path.abspath(f) for p in args.pattern for f in glob.glob(p)]
     frames = []
 
     for f in csv_files:
@@ -27,7 +27,7 @@ def main():
 
         df = pl.read_csv(f)
         frames.append(df)
-        print(f"Merged: {os.path.basename(f)}")
+        print(f"Loaded: {os.path.basename(f)}")
 
     if frames:
         try:
