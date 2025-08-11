@@ -9,18 +9,20 @@ def main():
     parser.add_argument('-o', '--output', default='join.csv', help="Output filename (default: 'join.csv')")
     args = parser.parse_args()
 
-    if os.path.exists(args.output):
+    output_path = os.path.abspath(args.output)
+
+    if os.path.exists(output_path):
         confirm = input(f"Output file {args.output} already exists. Overwrite? (y/N): ").strip().lower()
         if confirm != 'y':
             print("Aborted. Output file not overwritten.")
             return
 
-    csv_files = glob.glob(args.pattern)
+    csv_files = [os.path.abspath(f) for f in glob.glob(args.pattern)]
     frames = []
 
     for f in csv_files:
-        if f == args.output:
-            print(f"Skipping output file: {args.output}")
+        if f == output_path:
+            print(f"Skipping output file: {os.path.basename(args.output)}")
             continue
 
         df = pl.read_csv(f)
@@ -30,7 +32,7 @@ def main():
     if frames:
         try:
             result = pl.concat(frames)
-            result.write_csv(args.output)
+            result.write_csv(output_path)
             print(f"All files merged into {args.output}")
         except Exception as e:
             print(f"Error during concatenation: {e}")
