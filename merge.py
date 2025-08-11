@@ -25,7 +25,7 @@ def main():
             print(f"Skipping output file: {os.path.basename(args.output)}")
             continue
 
-        df = pl.read_csv(f, infer_schema_length=1000)
+        df = pl.read_csv(f, infer_schema=False)
         frames.append(df)
         print(f"Loaded: {os.path.basename(f)}")
 
