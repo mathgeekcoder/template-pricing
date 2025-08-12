@@ -115,7 +115,7 @@ int GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
     pricer_farkas.init(&_executor, pricer, pricing, lp);
 
     double optimal_pricing = 0.0;
-    bool any = false;
+	int added_columns = 1; // initialize to 1 to avoid NaN in first iteration
 
     if (!restoreFeasibility(pricer_farkas))
         return -1;
@@ -123,7 +123,9 @@ int GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
     double _rmpLB = rmp->getObjectiveValue();
     updateCompactSolution();
     tbl.output(iteration_count, _LB, _UB, "-", _rmpLB, "-", basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
-    csv_writer.append_row(instance.name, pricer.name, params.column_retention, iteration_count, _LB, _UB, "", _rmpLB, "", basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", -1);
+	csv_writer.append_row(instance.name, pricer.name, params.column_retention, params.replication, iteration_count, 
+        _LB, _UB, "", _rmpLB, "", basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), 
+        lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), lp_iteration_count / static_cast<double>(rmp->getNumCol()), int(basis_size == instance.machines), int(false), -1);
 
     // primal simplex for warm-start "add columns"
     rmp->setOptionValue("simplex_strategy", "4");
@@ -132,6 +134,8 @@ int GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
     //rmp->setOptionValue(kRunCrossoverString, kHighsOffString);
     pricer.init_feasible();
     column_management.init(rmp.get(), &instance, params);
+
+    double avg_pivots_per_column = lp_iteration_count / static_cast<double>(rmp->getNumCol()) / static_cast<double>(iteration_count);
 
     if (params.nodes > 0) {
         do {
@@ -148,6 +152,7 @@ rmp_time.start();
 
             updateCompactSolution();
             lp_iteration_count += get_lp_iters();
+			double lp_iteration_per_column = get_lp_iters() / static_cast<double>(added_columns);
 rmp_time.pause();
 
 cg_time.start();
@@ -155,7 +160,7 @@ cg_time.start();
             optimal_pricing = pricer.optimize(solution.row_dual, pricing, _reduced_costs);
 
             column_management.reduce(iteration_count);
-            any = add_columns(_reduced_costs);
+            added_columns = add_columns(_reduced_costs);
 
             // ASSUMES lambda <= 1, otherwise need to scale (e.g. _rmpLB / (1 + reduced cost))
             // This is only valid in root node, otherwise need to keep track of worst node
@@ -170,7 +175,9 @@ cg_time.pause();
                 break;
 
             // logging
-            csv_writer.append_row(instance.name, pricer.name, params.column_retention, iteration_count, _LB, _UB, gap * 100, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", 0);
+            csv_writer.append_row(instance.name, pricer.name, params.column_retention, params.replication, iteration_count, 
+                _LB, _UB, gap * 100, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), 
+                lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), lp_iteration_per_column, int(basis_size==instance.machines), int(false), 0);
 
             if (iteration_count % ITERATION_OUTPUT == 0 && total_time.TotalSeconds() - previous_logging_time > ITERATION_TIME) {
                 tbl.output(iteration_count, _LB, _UB, gap * 100, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
@@ -178,8 +185,9 @@ cg_time.pause();
             }
 
             ++iteration_count;
+            avg_pivots_per_column = ((iteration_count - 1) * avg_pivots_per_column + lp_iteration_per_column) / static_cast<double>(iteration_count);
 
-        } while (any && (params.timeout < 0 || total_time.TotalSeconds() < params.timeout) && !should_stop);
+        } while (added_columns > 0 && (params.timeout < 0 || total_time.TotalSeconds() < params.timeout) && !should_stop);
 
         updateCompactSolution();
     }
@@ -187,7 +195,9 @@ cg_time.pause();
 	double lb = std::ceil(_LB - 1e-6);
     double gap = std::abs(100.0 * (_UB - lb) / _UB);
     tbl.output(iteration_count, lb, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
-    csv_writer.append_row(instance.name, pricer.name, params.column_retention, iteration_count, _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), lp_iteration_count, "", 1);
+    csv_writer.append_row(instance.name, pricer.name, params.column_retention, params.replication, iteration_count, 
+        _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), 
+        lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), avg_pivots_per_column, int(!std::isnan(gap)), int((params.timeout > 0 && total_time.TotalSeconds() > params.timeout)), 1);
 
     std::cout << std::format("\n"
 		"Inst : {}\n"
@@ -410,8 +420,8 @@ double GapSolver::remove_duplicates() {
     }
 }
 
-bool GapSolver::add_columns(std::vector<double>& reduced_costs) {
-    bool any = false;
+int GapSolver::add_columns(std::vector<double>& reduced_costs) {
+    int count = 0;
 
     for (int m = 0; m < instance.machines; ++m) {
         auto& profit = instance.profit[m];
@@ -422,10 +432,10 @@ bool GapSolver::add_columns(std::vector<double>& reduced_costs) {
             double cost = sum(solution.begin(), --solution.end(), 0.0, profit);
 
             rmp->addCol(cost, 0, kHighsInf, static_cast<int>(pricing[m].solution.size()), pricing[m].solution.data(), _ones.data());
-            any = true;
+            ++count;
         }
     }
 
-    return any;
+    return count;
 }
 

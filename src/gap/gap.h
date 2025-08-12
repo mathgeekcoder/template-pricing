@@ -99,6 +99,6 @@ struct GapSolver {
     bool restoreFeasibility(FarkasPricerType &pricer_farkas);
 	void updateCompactSolution();
 
-    bool add_columns(std::vector<double>& reduced_costs);
+    int add_columns(std::vector<double>& reduced_costs);
     double remove_duplicates();
 };
