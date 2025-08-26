@@ -33,6 +33,7 @@ int solve_gap(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::Front
     params.random_seed = (seed == -1 ? static_cast<int>(std::time(nullptr)) : seed) + replication;
     params.num_threads = num_threads;
     params.column_retention = keep_cols;
+	params.replication = replication;
 
     if (keep_cols == "low") {
         params.age_limit = 5;
