@@ -30,13 +30,13 @@ int solve_gap(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::Front
     }
 
     Parameters params;
-    params.random_seed = (seed == -1 ? static_cast<int>(std::time(nullptr)) : seed) + replication;
+    params.random_seed = (seed == -1 ? static_cast<int>(std::time(nullptr)) + replication : seed);
     params.num_threads = num_threads;
     params.column_retention = keep_cols;
 	params.replication = replication;
 
     if (keep_cols == "low") {
-        params.age_limit = 5;
+        params.age_limit = 6;
         params.max_col_multiplier = 1;
     }
     else if (keep_cols == "med") {
@@ -206,7 +206,7 @@ int main(int argc, char* argv[]) {
             for (int retries = 20; retries >= 0; --retries) {
                 // GAP instances
                 if (filename.extension() == "") {
-                    result = solve_gap(filename, csv_writer, method, seed, replication, keep_cols, num_threads);
+                    result = solve_gap(filename, csv_writer, method, (seed == -1 ? (20 - retries) * 100 + (replication - 1) : seed), replication, keep_cols, num_threads);
                     std::cout << std::endl;
                 }
                 else {

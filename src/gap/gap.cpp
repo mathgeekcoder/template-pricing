@@ -206,7 +206,9 @@ cg_time.pause();
         "CG   : {:.3f} s\n" 
 		"Total: {:.3f} s\n" 
 		"#Cols: {}\n"  
-        "Gap  : {:.2f}% \n", instance.name, pricer.name, rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), rmp->getNumCol(), gap);
+        "Gap  : {:.2f}% \n"
+        "Pvt/s: {:.2f}\n", 
+        instance.name, pricer.name, rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), rmp->getNumCol(), gap, lp_iteration_count / rmp_time.TotalSeconds());
 
     return 0;
 }
