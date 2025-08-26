@@ -141,6 +141,7 @@ int GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
         do {
 rmp_time.start();
             auto status = rmp->run();
+rmp_time.pause();
 
             if (rmp->getModelStatus() != HighsModelStatus::kOptimal) {
                 std::cout << std::format("{} {}: Error - {}\n", instance.name, pricer.name, (int)rmp->getModelStatus());
@@ -153,7 +154,6 @@ rmp_time.start();
             updateCompactSolution();
             lp_iteration_count += get_lp_iters();
 			double lp_iteration_per_column = get_lp_iters() / static_cast<double>(added_columns);
-rmp_time.pause();
 
 cg_time.start();
             pricer.update();
