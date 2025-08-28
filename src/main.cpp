@@ -15,6 +15,7 @@
 #include "taskflow/algorithm/for_each.hpp"
 
 namespace fs = std::filesystem;
+bool has_completed(const std::string& log_filename);
 
 int solve_gap(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer, std::string& pricing_method, int seed, int replication, std::string keep_cols, int num_threads) {
     if (keep_cols == "best") {
@@ -198,6 +199,13 @@ int main(int argc, char* argv[]) {
     for (int replication = 1; replication <= num_replications; ++replication) {
         taskflow.for_each(filePaths.begin(), filePaths.end(), [&, replication](const fs::path& filename) {
 			std::string log_filename = std::format("{}-{}-{}-output-{}.csv", filename.filename().string(), method, keep_cols, replication);
+            
+            // check to see if output already exists, and if has been completed
+            if (has_completed(log_filename)) {
+                std::cout << "Skipping " << filename.filename().string() << " (log exists and completed): " << log_filename << std::endl;
+                return;
+			}
+
             quill::CsvWriter<CsvSchema, quill::FrontendOptions> csv_writer(log_filename);
 
             int result = 0;
@@ -230,4 +238,33 @@ int main(int argc, char* argv[]) {
 
     quill::Backend::stop();
     return 0;
+}
+
+bool has_completed(const std::string& log_filename) {
+    if (fs::exists(log_filename)) {
+        try {
+            std::ifstream in(log_filename);
+            in.seekg(0, std::ios::end); // Move to the end of the file
+
+            char ch;
+
+            // Move backwards to find the last comma
+            std::streamoff end_pos = static_cast<std::streamoff>(in.tellg());
+            for (std::streamoff pos = end_pos - 1; pos >= 0; --pos) {
+                in.seekg(static_cast<std::streampos>(pos));
+                in.get(ch);
+                if (ch == ',' && pos != end_pos - 1) {
+                    break; // Found the last comma
+                }
+            }
+
+            std::string last;
+            std::getline(in, last);
+            return (last == "1");
+        }
+        catch (...) {
+            // If anything goes wrong reading the file, fall back to re-running
+        }
+    }
+    return false;
 }
