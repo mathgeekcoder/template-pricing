@@ -85,6 +85,12 @@ int main(int argc, char* argv[]) {
     program.add_argument("input")
         .help("Input file or directory (can use wildcard patterns)");
 
+    program.add_argument("-f", "--force")
+        .default_value(false)
+        .implicit_value(true)
+        .help("force overwrite of existing log files")
+		.nargs(0);
+
     program.add_argument("-m", "--method")
         .default_value(std::string("lagrange_template"))
         .help("pricing method: {mip_template, lagrange_template, wentges, dantzig}")
@@ -134,6 +140,7 @@ int main(int argc, char* argv[]) {
     std::string method = program.get<std::string>("--method");
     std::string keep_cols = program.get<std::string>("--keep_cols");
 
+	bool force = program.get<bool>("--force");
 	int seed = program.get<int>("--seed");
     int num_replications = program.get<int>("--replications");
     int num_parallel = program.get<int>("--parallel");
@@ -201,7 +208,7 @@ int main(int argc, char* argv[]) {
 			std::string log_filename = std::format("{}-{}-{}-output-{}.csv", filename.filename().string(), method, keep_cols, replication);
             
             // check to see if output already exists, and if has been completed
-            if (has_completed(log_filename)) {
+            if (!force && has_completed(log_filename)) {
                 std::cout << "Skipping " << filename.filename().string() << " (log exists and completed): " << log_filename << std::endl;
                 return;
 			}
