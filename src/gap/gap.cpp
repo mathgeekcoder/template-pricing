@@ -104,6 +104,7 @@ int GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
     rmp->setOptionValue("output_flag", false);
     rmp->setOptionValue(kPresolveString, "off");
     rmp->setOptionValue("random_seed", params.random_seed);
+	rmp->setOptionValue("threads", 1);
     std::function<HighsInt()> get_lp_iters = [&]() { return rmp->getInfo().simplex_iteration_count; };
 
     auto model = SetCoverRestrictedProblem(instance.jobs, instance.machines, ObjSense::kMinimize);
@@ -158,6 +159,7 @@ rmp_time.pause();
 cg_time.start();
             pricer.update();
             optimal_pricing = pricer.optimize(solution.row_dual, pricing, _reduced_costs);
+cg_time.pause();
 
             column_management.reduce(iteration_count);
             added_columns = add_columns(_reduced_costs);
@@ -165,7 +167,6 @@ cg_time.start();
             // ASSUMES lambda <= 1, otherwise need to scale (e.g. _rmpLB / (1 + reduced cost))
             // This is only valid in root node, otherwise need to keep track of worst node
             _LB = std::max(_LB, _rmpLB - optimal_pricing);
-cg_time.pause();
 
            // check if we can stop
             double lb = std::ceil(_LB - 1e-6);

@@ -39,7 +39,7 @@ void GapPricingMIP::init(uint32_t index, const GapInstance& instance) {
 
     highs.reset(new Highs);
     highs->setOptionValue("output_flag", false);
-    //highs->setOptionValue("threads", 1);
+    highs->setOptionValue("threads", 1);
     highs->passModel(model);
 }
 
@@ -117,17 +117,20 @@ void TemplatePrice::init(tf::Executor* executor, Highs* rmp, GapInstance* instan
 
 double TemplatePrice::optimize(const std::vector<double>& duals, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs) {
 	tf::Taskflow taskflow;
+    tf::IndexRange range(0, _instance->machines, 1);
 
-    taskflow.for_each_index(0, _instance->machines, 1, [&](int m) {
+    taskflow.for_each_by_index(range, [&](tf::IndexRange<int> subrange) {
         std::vector<double> obj(_instance->jobs);
 
-        for (int j = 0; j < _instance->jobs; ++j) {
-            obj[j] = duals[j] - _instance->profit[m][j];
-        }
+        for (int m = subrange.begin(); m < subrange.end(); m += subrange.step_size()) {
+            for (int j = 0; j < _instance->jobs; ++j) {
+                obj[j] = duals[j] - _instance->profit[m][j];
+            }
 
-        reduced_costs[m] = _mip->_pricing[m].optimize_template(_template[m], obj, duals[_instance->jobs + m]);
-        pricing[m].solution.swap(_mip->_pricing[m].solution);
-        pricing[m].solution.push_back(_instance->jobs + m);
+            reduced_costs[m] = _mip->_pricing[m].optimize_template(_template[m], obj, duals[_instance->jobs + m]);
+            pricing[m].solution.swap(_mip->_pricing[m].solution);
+            pricing[m].solution.push_back(_instance->jobs + m);
+        }
     });
 
 	_executor->run(std::move(taskflow)).wait();

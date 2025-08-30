@@ -23,14 +23,20 @@ double WentgesPrice::optimize(const std::vector<double>& dual_out, PricingBlockV
         return optimal_pricing;
 
     int k = 1;
+    double alpha_tilde = 0;
+    double beta = 0;
 
-    while (true) {
+    tf::Taskflow taskflow;
+
+    auto init = taskflow.emplace([&]() {});
+
+    auto update = taskflow.emplace([&]() {
         if (k > 1) {
             ++mis_price;
         }
 
-        double alpha_tilde = (k < 10 && alpha > 1e-3) ? std::max(0.0, 1 - k * (1 - alpha)) : 0;
-        double beta = 0;
+        alpha_tilde = (k < 10 && alpha > 1e-3) ? std::max(0.0, 1 - k * (1 - alpha)) : 0;
+        beta = 0;
 
         // stabilize duals for pricing
         if (norm(g_in) == 0 || k > 1) {
@@ -39,16 +45,16 @@ double WentgesPrice::optimize(const std::vector<double>& dual_out, PricingBlockV
             }
         }
         else {
-			// step 1. pi_tilde
+            // step 1. pi_tilde
             std::vector<double> pi_tilde(_rmp->getNumRow());
 
-			for (int row = _rmp->getNumRow() - 1; row >= 0; --row) {
+            for (int row = _rmp->getNumRow() - 1; row >= 0; --row) {
                 pi_tilde[row] = alpha_tilde * dual_in[row] + (1 - alpha_tilde) * dual_out[row];
-			}
+            }
 
             // step 2. pi_g
             std::vector<double> pi_g(_rmp->getNumRow());
-			double g = norm(dual_out, dual_in) / norm(g_in);
+            double g = norm(dual_out, dual_in) / norm(g_in);
 
             for (int row = _rmp->getNumRow() - 1; row >= 0; --row) {
                 pi_g[row] = dual_in[row] + g * g_in[row];
@@ -56,51 +62,51 @@ double WentgesPrice::optimize(const std::vector<double>& dual_out, PricingBlockV
 
             // step 2.5. 
             // beta = cos(angle between (dual_out - dual_in) and (pi_g - dual_in))
-			double dp = 0;
-			for (int row = _rmp->getNumRow() - 1; row >= 0; --row) {
+            double dp = 0;
+            for (int row = _rmp->getNumRow() - 1; row >= 0; --row) {
                 dp += (dual_out[row] - dual_in[row]) * (pi_g[row] - dual_in[row]);
-			}
-			beta = dp / (norm(dual_out, dual_in) * norm(pi_g, dual_in));  // (0, 1]
+            }
+            beta = dp / (norm(dual_out, dual_in) * norm(pi_g, dual_in));  // (0, 1]
 
             // step 3. rho
-			std::vector<double> rho(_rmp->getNumRow());
+            std::vector<double> rho(_rmp->getNumRow());
             for (int row = _rmp->getNumRow() - 1; row >= 0; --row) {
-				rho[row] = beta * pi_g[row] + (1 - beta) * dual_out[row];
+                rho[row] = beta * pi_g[row] + (1 - beta) * dual_out[row];
             }
 
-			// step 4. dual_sep
+            // step 4. dual_sep
             double coeff = norm(pi_tilde, dual_in) / norm(rho, dual_in);
 
             for (int row = _rmp->getNumRow() - 1; row >= 0; --row) {
                 dual_sep[row] = std::max(0.0, dual_in[row] + coeff * (rho[row] - dual_in[row]));
             }
         }
+	});
 
-        // optimal pricing for bounds
-		tf::Taskflow taskflow;
-        tf::IndexRange range(0, _instance->machines, 1);
 
-        taskflow.for_each_by_index(range, [&](tf::IndexRange<int> subrange) {
-            std::vector<double> obj(_instance->jobs);
+    // optimal pricing for bounds
+    tf::IndexRange range(0, _instance->machines, 1);
 
-            for (int m = subrange.begin(); m < subrange.end(); m += subrange.step_size()) {
-                for (int j = 0; j < _instance->jobs; ++j) {
-                    obj[j] = dual_sep[j] - _instance->profit[m][j];
-                }
+    auto optimize = taskflow.for_each_by_index(range, [&](tf::IndexRange<int> subrange) {
+        std::vector<double> obj(_instance->jobs);
 
-                pricing[m].optimize(obj, dual_sep[_instance->jobs + m]);
-
-                reduced_costs[m] = dual_out[_instance->jobs + m];
-                for (auto j : pricing[m].solution) {
-                    reduced_costs[m] += dual_out[j] - _instance->profit[m][j];
-                }
-
-                pricing[m].solution.push_back(_instance->jobs + m);
+        for (int m = subrange.begin(); m < subrange.end(); m += subrange.step_size()) {
+            for (int j = 0; j < _instance->jobs; ++j) {
+                obj[j] = dual_sep[j] - _instance->profit[m][j];
             }
-        });
 
-		_executor->run(std::move(taskflow)).wait();
+            pricing[m].optimize(obj, dual_sep[_instance->jobs + m]);
 
+            reduced_costs[m] = dual_out[_instance->jobs + m];
+            for (auto j : pricing[m].solution) {
+                reduced_costs[m] += dual_out[j] - _instance->profit[m][j];
+            }
+
+            pricing[m].solution.push_back(_instance->jobs + m);
+        }
+    });
+
+    auto check = taskflow.emplace([&]() {
         bool any = false;
 
         for (int m = 0; m < _instance->machines && any == false; ++m) {
@@ -108,32 +114,44 @@ double WentgesPrice::optimize(const std::vector<double>& dual_out, PricingBlockV
         }
 
         if (any == true || (alpha_tilde == 0.0 && beta == 0.0)) {
-            break;
+            return 1;
         }
 
         ++k;
-    }
+		return 0;
+    });
 
-    // Compute subgradient at separation point
-    // even if RMP is a cover on jobs, we want to find the subgradient for a partition
-	std::fill(g_sep.begin(), g_sep.begin() + _instance->jobs, -1);
+    auto finalize = taskflow.emplace([&]() {
+        // Compute subgradient at separation point
+        // even if RMP is a cover on jobs, we want to find the subgradient for a partition
+        std::fill(g_sep.begin(), g_sep.begin() + _instance->jobs, -1);
 
-    for (int m = 0; m < _instance->machines; ++m) {
-        for (int j : pricing[m].solution) {
-            ++g_sep[j];
-        }
-    }
-
-	// Only adjust alpha if no mispricing
-    if (k == 1) {
-        double v = 0;
-        for (int j = 0; j < _instance->jobs; ++j) {
-            v += g_sep[j] * (dual_out[j] - dual_in[j]);
+        for (int m = 0; m < _instance->machines; ++m) {
+            for (int j : pricing[m].solution) {
+                ++g_sep[j];
+            }
         }
 
-        // alpha in [0, 1)
-        alpha = v > 0 ? std::min(1.0 - 1e-4, alpha + (1.0 - alpha) * 0.1) : std::max(0.0, alpha - 0.1);
-    }
+        // Only adjust alpha if no mispricing
+        if (k == 1) {
+            double v = 0;
+            for (int j = 0; j < _instance->jobs; ++j) {
+                v += g_sep[j] * (dual_out[j] - dual_in[j]);
+            }
+
+            // alpha in [0, 1)
+            alpha = v > 0 ? std::min(1.0 - 1e-4, alpha + (1.0 - alpha) * 0.1) : std::max(0.0, alpha - 0.1);
+        }
+    });
+
+
+    // Configure task pipeline and execute
+	init.precede(update);
+    update.precede(optimize);
+    optimize.precede(check);
+    check.precede(update, finalize);
+
+	_executor->run(std::move(taskflow)).wait();
 
     return optimal_pricing;
 }

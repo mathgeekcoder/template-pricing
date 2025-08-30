@@ -37,8 +37,8 @@ int solve_gap(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::Front
 	params.replication = replication;
 
     if (keep_cols == "low") {
-        params.age_limit = 6;
-        params.max_col_multiplier = 1;
+        params.age_limit = 5;
+        params.max_col_multiplier = 1.5;
     }
     else if (keep_cols == "med") {
         params.age_limit = 10;
