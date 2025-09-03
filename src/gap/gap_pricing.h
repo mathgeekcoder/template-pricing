@@ -28,4 +28,22 @@ struct GapPricing {
 
         return opt + offset;
     }
+
+    double approx(const std::vector<double>& obj, double offset) {
+        double approx_opt;
+
+		// need to copy, as SCIPsolveKnapsackApproximately modifies arrays
+        std::vector<int> weights = _instance->demands[_machine];
+        std::vector<double> tmp_obj = obj;
+        std::vector<int> index(_instance->jobs);
+        std::iota(index.begin(), index.end(), 0);
+
+        int solution_size = 0;
+        solution.resize(_instance->jobs);
+
+        SCIPsolveKnapsackApproximately(_instance->jobs, weights.data(), tmp_obj.data(), _instance->capacity[_machine],
+            index.data(), solution.data(), nullptr, &solution_size, nullptr, &approx_opt);
+        solution.resize(solution_size);
+        return approx_opt + offset;
+	}
 };

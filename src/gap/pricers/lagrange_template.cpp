@@ -85,6 +85,21 @@ double LagrangeTemplatePrice::optimize_lagrangian(const std::vector<double>& tem
             tmpProfit[i] = template_obj[i] + mu * obj[i];
         }
 
+        // fast approximate - can sometimes find better solutions
+        pricer.approx(tmpProfit, mu * offset);
+        double approx_rc = sum(pricer.solution, offset, obj);
+
+        if (approx_rc > 1e-6) {
+            double tmpl = sum(pricer.solution, 0.0, template_obj);
+
+            if (best < tmpl || best == tmpl && best_rc < approx_rc) {
+                best = tmpl;
+                best_rc = approx_rc;
+                best_solution.swap(pricer.solution);
+            }
+        }
+
+        // optimal
         auto opt = pricer.optimize(tmpProfit, mu * offset);
         ub = std::min(ub, std::floor(opt));
 

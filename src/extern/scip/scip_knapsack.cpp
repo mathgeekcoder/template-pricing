@@ -250,11 +250,13 @@ int SCIPsolveKnapsackApproximately(
 	int j;
 	int criticalindex;
 
-	if (solitems != NULL)
-	{
+	if (solitems != NULL) {
 		*nsolitems = 0;
+	}
+	if (nonsolitems != NULL) {
 		*nnonsolitems = 0;
 	}
+
 	if (solval != NULL)
 		*solval = 0.0;
 
@@ -289,8 +291,7 @@ int SCIPsolveKnapsackApproximately(
 	if (solval != NULL)
 		(*solval) += (capacity - solitemsweight) * tempsort[j];
 
-	if (solitems != NULL)
-	{
+	if (nonsolitems != NULL) {
 		for (; j < nitems; j++)
 			nonsolitems[(*nnonsolitems)++] = items[j];
 	}
