@@ -1,16 +1,17 @@
 #pragma once
 #include "gap/gap_pricing.h"
 
+template <typename RmpSolver>
 struct LagrangeTemplatePrice {
     static constexpr const char* name = "LagrangeTemplate";
 
-    Highs* _rmp = nullptr;
+    RmpSolver* _rmp = nullptr;
     GapInstance* _instance = nullptr;
     TemplatePricing _template;
 	tf::Executor* _executor;
     std::vector<double> _mu;
 
-    void init(tf::Executor* executor, Highs* rmp, GapInstance* instance) {
+    void init(tf::Executor* executor, RmpSolver* rmp, GapInstance* instance) {
         _rmp = rmp;
         _instance = instance;
         _template.init(instance->machines, instance->jobs);

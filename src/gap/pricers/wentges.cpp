@@ -16,7 +16,8 @@ double norm(const std::vector<double>& a, const std::vector<double>& b) {
 	return std::sqrt(norm);
 }
 
-double WentgesPrice::optimize(const std::vector<double>& dual_out, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs) {
+template <typename RmpSolver>
+double WentgesPrice<RmpSolver>::optimize(const std::vector<double>& dual_out, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs) {
     double optimal_pricing = dantzig.optimize(dual_out, pricing, reduced_costs);
 
     if (optimal_pricing < 1e-6)
@@ -156,3 +157,10 @@ double WentgesPrice::optimize(const std::vector<double>& dual_out, PricingBlockV
     return optimal_pricing;
 }
 
+template class WentgesPrice<Highs>;
+
+#ifdef SUPPORT_GUROBI
+
+template class WentgesPrice<GurobiHighs>;
+
+#endif

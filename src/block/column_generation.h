@@ -105,11 +105,11 @@ struct TemplatePricing {
 		// assumes lp colwise
 		for (size_t i = 0, end = solution.col_value.size(); i < end; ++i) {
 			if (solution.col_value[i] > 1e-6) {
-				auto start = col_begin(highs, i);
-				auto end = --col_end(highs, i);  // assume last element is the block index
+				const auto& col = get_column(highs, i);
+				auto end = std::prev(col.end());  // assume last element is the block index
 				auto& template_block = _template_columns[*end - _partitions];
 
-				for (auto it = start; it != end; ++it) {
+				for (auto it = col.begin(); it != end; ++it) {
 					template_block[*it] += solution.col_value[i];
 				}
 			}

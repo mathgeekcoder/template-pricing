@@ -17,6 +17,7 @@
 namespace fs = std::filesystem;
 bool has_completed(const std::string& log_filename);
 
+template <typename RmpSolver>
 int solve_gap(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer, std::string& pricing_method, int seed, int replication, std::string keep_cols, int num_threads) {
     if (keep_cols == "best") {
         if (pricing_method == "lagrange_template") {
@@ -53,25 +54,26 @@ int solve_gap(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::Front
         return -1;
     }
 
+	std::cout << "Solver: " << (std::is_same<RmpSolver, Highs>() ? "HiGHS" : "Gurobi") << std::endl;
     std::cout << "Replication: " << replication << std::endl;
     std::cout << "Random seed: " << params.random_seed << std::endl;
     std::cout << "Pricing method: " << pricing_method << std::endl;
     std::cout << "Column retention: " << keep_cols << std::endl;
     std::cout << filename.filename().string() << std::endl << std::endl;
 
-    GapSolver m(filename.string(), params, csv_writer);
+    GapSolver<RmpSolver> m(filename.string(), params, csv_writer);
 
     if (pricing_method == "mip_template") {
-        return m.solve<TemplatePrice, TemplateFarkas>();
+        return m.solve<TemplatePrice<RmpSolver>, TemplateFarkas<RmpSolver>>();
     }
     else if (pricing_method == "lagrange_template") {
-        return m.solve<LagrangeTemplatePrice, LagrangeTemplateFarkas>();
+        return m.solve<LagrangeTemplatePrice<RmpSolver>, LagrangeTemplateFarkas<RmpSolver>>();
     }
     else if (pricing_method == "wentges") {
-        return m.solve<WentgesPrice, DantzigFarkas>();
+        return m.solve<WentgesPrice<RmpSolver>, DantzigFarkas<RmpSolver>>();
     }
     else if (pricing_method == "dantzig") {
-        return m.solve<DantzigPrice, DantzigFarkas>();
+        return m.solve<DantzigPrice<RmpSolver>, DantzigFarkas<RmpSolver>>();
     }
     else {
         std::cerr << "Unsupported pricing method: " << pricing_method << std::endl;
@@ -90,6 +92,12 @@ int main(int argc, char* argv[]) {
         .implicit_value(true)
         .help("force overwrite of existing log files")
 		.nargs(0);
+
+    program.add_argument("-g", "--gurobi")
+        .default_value(false)
+        .implicit_value(true)
+        .help("use Gurobi solver")
+        .nargs(0);
 
     program.add_argument("-m", "--method")
         .default_value(std::string("lagrange_template"))
@@ -141,6 +149,7 @@ int main(int argc, char* argv[]) {
     std::string keep_cols = program.get<std::string>("--keep_cols");
 
 	bool force = program.get<bool>("--force");
+	bool use_gurobi = program.get<bool>("--gurobi");
 	int seed = program.get<int>("--seed");
     int num_replications = program.get<int>("--replications");
     int num_parallel = program.get<int>("--parallel");
@@ -190,6 +199,15 @@ int main(int argc, char* argv[]) {
 
     std::sort(filePaths.begin(), filePaths.end());
 
+    if (use_gurobi) {
+#ifdef SUPPORT_GUROBI
+        GurobiHighs::start();
+#else
+        std::cerr << "Gurobi support has not been enabled." << std::endl;
+        return 1;
+#endif
+    }
+
 #ifndef NDEBUG
     num_parallel = 1;
     num_threads = 1;
@@ -221,7 +239,15 @@ int main(int argc, char* argv[]) {
             for (int retries = 20; retries >= 0; --retries) {
                 // GAP instances
                 if (filename.extension() == "") {
-                    result = solve_gap(filename, csv_writer, method, (seed == -1 ? (20 - retries) * 100 + (replication - 1) : seed), replication, keep_cols, num_threads);
+                    if (use_gurobi) {
+#ifdef SUPPORT_GUROBI
+                        result = solve_gap<GurobiHighs>(filename, csv_writer, method, (seed == -1 ? (20 - retries) * 100 + (replication - 1) : seed), replication, keep_cols, num_threads);
+#endif
+                    }
+                    else {
+                        result = solve_gap<Highs>(filename, csv_writer, method, (seed == -1 ? (20 - retries) * 100 + (replication - 1) : seed), replication, keep_cols, num_threads);
+					}
+
                     std::cout << std::endl;
                 }
                 else {
@@ -242,6 +268,12 @@ int main(int argc, char* argv[]) {
     }
 
 	executor.run(std::move(taskflow)).wait();
+
+#ifdef SUPPORT_GUROBI
+    if (use_gurobi) {
+        GurobiHighs::stop();
+    }
+#endif
 
     quill::Backend::stop();
     return 0;

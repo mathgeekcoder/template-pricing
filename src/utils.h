@@ -12,6 +12,8 @@
 #include "highs/Highs.h"
 #include <mutex>
 #include <format>
+#include <span>
+#include "extern/gurobi/gurobi_highs.h"
 
 struct Timer
 {
@@ -283,15 +285,18 @@ static std::string replaceAll(std::string str, const std::string from, const std
     return str;
 }
 
-static std::vector<HighsInt>::const_iterator col_begin(const Highs& highs, size_t col) {
+static std::span<const HighsInt> get_column(const Highs& highs, size_t col) {
     auto& lp = highs.getLp();
-    return lp.a_matrix_.index_.begin() + lp.a_matrix_.start_[col];
+    return std::span<const HighsInt>(lp.a_matrix_.index_.cbegin() + lp.a_matrix_.start_[col], lp.a_matrix_.start_[col + 1] - lp.a_matrix_.start_[col]);
 }
 
-static std::vector<HighsInt>::const_iterator col_end(const Highs& highs, size_t col) {
-    auto& lp = highs.getLp();
-    return lp.a_matrix_.index_.begin() + lp.a_matrix_.start_[col + 1];
+#ifdef SUPPORT_GUROBI
+
+static std::vector<HighsInt> get_column(const GurobiHighs& highs, size_t col) {
+    return highs.get_col(col);
 }
+
+#endif
 
 #ifdef _WIN32
 

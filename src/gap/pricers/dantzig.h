@@ -1,14 +1,15 @@
 #pragma once
 #include "gap/gap_pricing.h"
 
+template <typename RmpSolver>
 struct DantzigPrice {
     static constexpr const char* name = "Dantzig";
 
-    Highs* _rmp = nullptr;
+    RmpSolver* _rmp = nullptr;
     GapInstance* _instance = nullptr;
     tf::Executor* _executor = nullptr;
 
-    void init(tf::Executor* executor, Highs* rmp, GapInstance* instance) {
+    void init(tf::Executor* executor, RmpSolver* rmp, GapInstance* instance) {
 		_executor = executor;
         _rmp = rmp;
         _instance = instance;

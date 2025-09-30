@@ -4,8 +4,9 @@
 //
 // Template-based MIP optimization
 //
+template <typename RmpSolver>
 struct GapPricingMIP : public GapPricing {
-    std::unique_ptr<Highs> highs;
+    std::unique_ptr<RmpSolver> highs;
 
     void init(uint32_t index, const GapInstance& instance);
     double optimize_template(const std::vector<double>& template_obj, const std::vector<double>& duals, double offset);
@@ -15,19 +16,20 @@ struct GapPricingMIP : public GapPricing {
 //
 // Template-based MIP pricing
 //
+template <typename RmpSolver>
 struct TemplatePrice {
     static constexpr const char* name = "MipTemplate";
 
-    Highs* _rmp = nullptr;
+    RmpSolver* _rmp = nullptr;
     GapInstance* _instance = nullptr;
 	tf::Executor* _executor = nullptr;
     TemplatePricing _template;
-    std::unique_ptr<PricingBlockVector<GapPricingMIP>> _mip;
+    std::unique_ptr<PricingBlockVector<GapPricingMIP<RmpSolver>>> _mip;
 
     TemplatePrice() = default;
     TemplatePrice(const TemplatePrice& copy);
 
-    void init(tf::Executor* executor, Highs* rmp, GapInstance* instance);
+    void init(tf::Executor* executor, RmpSolver* rmp, GapInstance* instance);
     double optimize(const std::vector<double>& duals, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs);
 
     void update() {
@@ -36,18 +38,4 @@ struct TemplatePrice {
 
     void init_feasible() {};
     void debug(std::string algorithm) {};
-};
-
-
-//
-// Fixed Template-based MIP pricing
-//
-struct FixedTemplatePrice : public TemplatePrice {
-    static constexpr const char* name = "FixedTemplate";
-
-    FixedTemplatePrice() = default;
-    FixedTemplatePrice(const FixedTemplatePrice& copy) : TemplatePrice(copy) { }
-
-    // override the update, so the template is "fixed"
-    void update() {};
 };

@@ -1,6 +1,7 @@
 #include "mip_template.h"
 
-void GapPricingMIP::init(uint32_t index, const GapInstance& instance) {
+template <typename RmpSolver>
+void GapPricingMIP<RmpSolver>::init(uint32_t index, const GapInstance& instance) {
     GapPricing::init(index, instance);
 
     // max tx
@@ -21,7 +22,7 @@ void GapPricingMIP::init(uint32_t index, const GapInstance& instance) {
     model.lp_.col_upper_.assign(_instance->jobs, 1);
     model.lp_.integrality_.assign(_instance->jobs, HighsVarType::kInteger);
 
-    model.lp_.row_lower_ = { 0, 0, 0 };
+    model.lp_.row_lower_ = { -kHighsInf, 0, 0 };
     model.lp_.row_upper_ = { (double)_instance->capacity[_machine], kHighsInf, kHighsInf };
 
     model.lp_.a_matrix_.format_ = MatrixFormat::kRowwise;
@@ -37,13 +38,14 @@ void GapPricingMIP::init(uint32_t index, const GapInstance& instance) {
         model.lp_.a_matrix_.value_[i] = _instance->demands[_machine][i];
     }
 
-    highs.reset(new Highs);
+    highs.reset(new RmpSolver);
     highs->setOptionValue("output_flag", false);
     highs->setOptionValue("threads", 1);
     highs->passModel(model);
 }
 
-double GapPricingMIP::optimize_template(const std::vector<double>& template_obj, const std::vector<double>& duals, double offset) {
+template <typename RmpSolver>
+double GapPricingMIP<RmpSolver>::optimize_template(const std::vector<double>& template_obj, const std::vector<double>& duals, double offset) {
     // heuristic dual & template
     double tmp = optimize(duals, offset);
     if (tmp <= 1e-6) {
@@ -65,10 +67,10 @@ double GapPricingMIP::optimize_template(const std::vector<double>& template_obj,
     double ht = highs->getObjectiveValue(), hd = offset;
 
     // switch objective, add new constraint
-    HighsStatus status = highs->changeColsCost(0, _instance->jobs - 1, duals.data());
+    highs->changeColsCost(0, _instance->jobs - 1, duals.data());
     highs->changeRowBounds(2, std::ceil(ht - 0.5), kHighsInf);
     highs->changeObjectiveOffset(offset);
-    status = highs->run();    
+    HighsStatus status = highs->run();
 
 	// ensure good reduced costs, prevent infinite loop
 	while (ht > -_instance->jobs && highs->getObjectiveValue() <= 1e-6) {
@@ -98,24 +100,27 @@ double GapPricingMIP::optimize_template(const std::vector<double>& template_obj,
 }
 
 
-TemplatePrice::TemplatePrice(const TemplatePrice& copy) {
+template <typename RmpSolver>
+TemplatePrice<RmpSolver>::TemplatePrice(const TemplatePrice& copy) {
     _rmp = copy._rmp;
     _instance = copy._instance;
     _template = copy._template;
-    _mip = std::make_unique<PricingBlockVector<GapPricingMIP>>(copy._instance->machines);
+    _mip = std::make_unique<PricingBlockVector<GapPricingMIP<RmpSolver>>>(copy._instance->machines);
     _mip->init(*_instance);
 }
 
-void TemplatePrice::init(tf::Executor* executor, Highs* rmp, GapInstance* instance) {
+template <typename RmpSolver>
+void TemplatePrice<RmpSolver>::init(tf::Executor* executor, RmpSolver* rmp, GapInstance* instance) {
     _rmp = rmp;
     _instance = instance;
 	_executor = executor;
     _template.init(instance->machines, instance->jobs);
-    _mip.reset(new PricingBlockVector<GapPricingMIP>(instance->machines));
+    _mip.reset(new PricingBlockVector<GapPricingMIP<RmpSolver>>(instance->machines));
     _mip->init(*instance);
 }
 
-double TemplatePrice::optimize(const std::vector<double>& duals, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs) {
+template <typename RmpSolver>
+double TemplatePrice<RmpSolver>::optimize(const std::vector<double>& duals, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs) {
 	tf::Taskflow taskflow;
     tf::IndexRange range(0, _instance->machines, 1);
 
@@ -143,3 +148,10 @@ double TemplatePrice::optimize(const std::vector<double>& duals, PricingBlockVec
     return optimal_pricing;
 }
 
+template class TemplatePrice<Highs>;
+
+#ifdef SUPPORT_GUROBI
+
+template class TemplatePrice<GurobiHighs>;
+
+#endif

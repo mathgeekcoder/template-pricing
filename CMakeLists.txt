@@ -10,6 +10,10 @@ find_path(QUILL_INCLUDE_DIRS "quill/Backend.h")
 file(GLOB_RECURSE INCLUDE_FILES src/*.h)
 file(GLOB_RECURSE SOURCE_FILES src/*.cpp)
 
+# Search for Gurobi Support
+add_subdirectory(src/extern/gurobi)
+
+include_directories(${GUROBI_INCLUDE_DIRS})
 include_directories(${QUILL_INCLUDE_DIRS})
 add_executable(${PROJECT_NAME} ${INCLUDE_FILES} ${SOURCE_FILES})
 
@@ -23,7 +27,15 @@ else()
     message(STATUS "IPO / LTO not supported: <${error}>")
 endif()
 
-target_link_libraries(${PROJECT_NAME} highs::highs)
+if(GUROBI_ENABLED) 
+    message(STATUS "Gurobi enabled")
+    message(STATUS "Gurobi header found: ${GUROBI_INCLUDE_DIRS}")
+    message(STATUS "Gurobi library found: ${GUROBI_LIB}")
+    target_compile_definitions(${PROJECT_NAME} PRIVATE SUPPORT_GUROBI) 
+endif()
+
+target_link_libraries(${PROJECT_NAME} highs::highs ${GUROBI_LIB})
 target_include_directories(${PROJECT_NAME} PUBLIC src)
+
 
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 20)

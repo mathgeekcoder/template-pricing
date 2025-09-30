@@ -2,7 +2,8 @@
 #include "taskflow/taskflow.hpp"
 #include "taskflow/algorithm/for_each.hpp"
 
-double LagrangeTemplatePrice::optimize(const std::vector<double>& duals, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs, bool update_duals) {
+template <typename RmpSolver>
+double LagrangeTemplatePrice<RmpSolver>::optimize(const std::vector<double>& duals, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs, bool update_duals) {
     std::vector<double> rc(_instance->machines, 0);
 
     tf::Taskflow taskflow;
@@ -41,7 +42,8 @@ double LagrangeTemplatePrice::optimize(const std::vector<double>& duals, Pricing
     return optimal_pricing;
 }
 
-double LagrangeTemplatePrice::optimize_lagrangian(const std::vector<double>& template_obj, const std::vector<double>& obj, double offset, GapPricing& pricer, double& hi_mu) {
+template <typename RmpSolver>
+double LagrangeTemplatePrice<RmpSolver>::optimize_lagrangian(const std::vector<double>& template_obj, const std::vector<double>& obj, double offset, GapPricing& pricer, double& hi_mu) {
     double ub = _instance->jobs;
     double best = -_instance->jobs;
     double best_rc = 0;
@@ -123,3 +125,11 @@ double LagrangeTemplatePrice::optimize_lagrangian(const std::vector<double>& tem
     pricer.solution.swap(best_solution);
     return best_rc;
 }
+
+template class LagrangeTemplatePrice<Highs>;
+
+#ifdef SUPPORT_GUROBI
+
+template class LagrangeTemplatePrice<GurobiHighs>;
+
+#endif

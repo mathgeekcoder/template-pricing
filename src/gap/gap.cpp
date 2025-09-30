@@ -11,15 +11,40 @@
 #include "utils.h"
 
 // Supported template instantiations
-template int GapSolver::solve(DantzigPrice& pricer, DantzigFarkas& pricer_farkas);
-template int GapSolver::solve(WentgesPrice& pricer, DantzigFarkas& pricer_farkas);
-template int GapSolver::solve(TemplatePrice& pricer, TemplateFarkas& pricer_farkas);
-template int GapSolver::solve(LagrangeTemplatePrice& pricer, LagrangeTemplateFarkas& pricer_farkas);
+template class DantzigPrice<Highs>;
 
-template bool GapSolver::restoreFeasibility(DantzigFarkas& pricer_farkas);
-template bool GapSolver::restoreFeasibility(TemplateFarkas& pricer_farkas);
+template class DantzigFarkas<Highs>;
+template class LagrangeTemplateFarkas<Highs>;
+template class TemplateFarkas<Highs>;
 
-void AgeColumnManagement::reduce(uint32_t iteration_count) {
+template int GapSolver<Highs>::solve(DantzigPrice<Highs>& pricer, DantzigFarkas<Highs>& pricer_farkas);
+template int GapSolver<Highs>::solve(WentgesPrice<Highs>& pricer, DantzigFarkas<Highs>& pricer_farkas);
+template int GapSolver<Highs>::solve(TemplatePrice<Highs>& pricer, TemplateFarkas<Highs>& pricer_farkas);
+template int GapSolver<Highs>::solve(LagrangeTemplatePrice<Highs>& pricer, LagrangeTemplateFarkas<Highs>& pricer_farkas);
+
+template bool GapSolver<Highs>::restoreFeasibility(DantzigFarkas<Highs>& pricer_farkas);
+template bool GapSolver<Highs>::restoreFeasibility(TemplateFarkas<Highs>& pricer_farkas);
+
+#ifdef SUPPORT_GUROBI
+
+template class DantzigPrice<GurobiHighs>;
+
+template class DantzigFarkas<GurobiHighs>;
+template class LagrangeTemplateFarkas<GurobiHighs>;
+template class TemplateFarkas<GurobiHighs>;
+
+template int GapSolver<GurobiHighs>::solve(DantzigPrice<GurobiHighs>& pricer, DantzigFarkas<GurobiHighs>& pricer_farkas);
+template int GapSolver<GurobiHighs>::solve(WentgesPrice<GurobiHighs>& pricer, DantzigFarkas<GurobiHighs>& pricer_farkas);
+template int GapSolver<GurobiHighs>::solve(TemplatePrice<GurobiHighs>& pricer, TemplateFarkas<GurobiHighs>& pricer_farkas);
+template int GapSolver<GurobiHighs>::solve(LagrangeTemplatePrice<GurobiHighs>& pricer, LagrangeTemplateFarkas<GurobiHighs>& pricer_farkas);
+
+template bool GapSolver<GurobiHighs>::restoreFeasibility(DantzigFarkas<GurobiHighs>& pricer_farkas);
+template bool GapSolver<GurobiHighs>::restoreFeasibility(TemplateFarkas<GurobiHighs>& pricer_farkas);
+
+#endif
+
+template <typename RmpSolver>
+void AgeColumnManagement<RmpSolver>::reduce(uint32_t iteration_count) {
     // "age" the columns, i.e., set the current basis to the current iteration
     const auto& solution = _rmp->getSolution();
     const HighsInt* basis = _rmp->getBasicVariablesArray();
@@ -60,8 +85,8 @@ void AgeColumnManagement::reduce(uint32_t iteration_count) {
     }
 }
 
-
-void GapSolver::presolve() {
+template <typename RmpSolver>
+void GapSolver<RmpSolver>::presolve() {
     // solve LP for template pricing
     _LB = lp.solve();
     lp_iteration_count = lp.iterations;
@@ -79,8 +104,9 @@ void GapSolver::presolve() {
     }
 }
 
+template <typename RmpSolver>
 template <typename PricerType, typename FarkasPricerType>
-int GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
+int GapSolver<RmpSolver>::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
     highs::parallel::initialize_scheduler(1);
     total_time.start();
     tbl.write_header();
@@ -100,7 +126,7 @@ int GapSolver::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
         should_stop = true; 
     });
 
-    rmp.reset(new Highs);
+    rmp.reset(new RmpSolver);
     rmp->setOptionValue("output_flag", false);
     rmp->setOptionValue(kPresolveString, "off");
     rmp->setOptionValue("random_seed", params.random_seed);
@@ -189,8 +215,6 @@ cg_time.pause();
             avg_pivots_per_column = ((iteration_count - 1) * avg_pivots_per_column + lp_iteration_per_column) / static_cast<double>(iteration_count);
 
         } while (added_columns > 0 && (params.timeout < 0 || total_time.TotalSeconds() < params.timeout) && !should_stop);
-
-        updateCompactSolution();
     }
 
 	double lb = std::ceil(_LB - 1e-6);
@@ -214,8 +238,9 @@ cg_time.pause();
     return 0;
 }
 
+template <typename RmpSolver>
 template <typename FarkasPricerType>
-bool GapSolver::restoreFeasibility(FarkasPricerType &pricer_farkas) {
+bool GapSolver<RmpSolver>::restoreFeasibility(FarkasPricerType &pricer_farkas) {
     bool has_dual_ray = false;
     std::vector<double> dual_ray(rmp->getNumRow(), 1);
 
@@ -274,7 +299,8 @@ cg_time.pause();
     return true;
 }
 
-void GapSolver::updateCompactSolution() {
+template <typename RmpSolver>
+void GapSolver<RmpSolver>::updateCompactSolution() {
     const auto& solution = rmp->getSolution();
 
     if (solution.value_valid) {
@@ -285,10 +311,12 @@ void GapSolver::updateCompactSolution() {
         for (size_t idx = 0, size = rmp->getNumCol(); idx < size; ++idx) {
             if (solution.col_value[idx] > 1e-6) {
                 ++basis_size;
-                auto end = --col_end(*rmp, idx);
+				const auto& col = get_column(*rmp.get(), idx);
+
+                auto end = std::prev(col.end());
                 auto machine = *end - instance.jobs;
 
-                for (auto it = col_begin(*rmp, idx); it != end; ++it) {
+                for (auto it = col.begin(); it != end; ++it) {
                     _compact_solution[machine * instance.jobs + *it] += solution.col_value[idx];
                 }
             }
@@ -328,7 +356,8 @@ void GapSolver::updateCompactSolution() {
 
 // we might have duplicate jobs since RMP uses cover (instead of partition)
 // if we have an integral solution we need to remove duplicates to get the correct UB
-double GapSolver::remove_duplicates() {
+template <typename RmpSolver>
+double GapSolver<RmpSolver>::remove_duplicates() {
     const auto& solution = rmp->getSolution();
     const HighsInt* basis = rmp->getBasicVariablesArray();
     const HighsInt num_col = rmp->getNumCol();
@@ -342,7 +371,9 @@ double GapSolver::remove_duplicates() {
         int idx = basis[i];
 
         if (idx < num_col && solution.col_value[idx] > 1e-6) {
-            for (auto it = col_begin(*rmp, idx), end = --col_end(*rmp, idx); it != end; ++it) {
+			const auto& col = get_column(*rmp, idx);
+
+            for (auto it = col.begin(), end = std::prev(col.end()); it != end; ++it) {
 				has_duplicates |= has_job[*it];
                 has_job[*it] = true;
             }
@@ -362,9 +393,10 @@ double GapSolver::remove_duplicates() {
 		// copy job/machine for easy lookup
         for (int i = rmp->getNumRow() - 1; i >= 0; --i) {
             if (basis[i] < num_col && solution.col_value[basis[i]] > 1e-6) {
-                auto end = --col_end(*rmp, basis[i]);
+				const auto& col = get_column(*rmp, basis[i]);
+				auto end = std::prev(col.end());
 				auto machine = *end - instance.jobs;
-				std::copy(col_begin(*rmp, basis[i]), end, std::back_inserter(machine_jobs[machine]));
+				std::copy(col.begin(), end, std::back_inserter(machine_jobs[machine]));
 
                 for (auto j : machine_jobs[machine]) {
                     job_machines[j].emplace_back(machine);
@@ -423,7 +455,8 @@ double GapSolver::remove_duplicates() {
     }
 }
 
-int GapSolver::add_columns(std::vector<double>& reduced_costs) {
+template <typename RmpSolver>
+int GapSolver<RmpSolver>::add_columns(std::vector<double>& reduced_costs) {
     int count = 0;
 
     for (int m = 0; m < instance.machines; ++m) {

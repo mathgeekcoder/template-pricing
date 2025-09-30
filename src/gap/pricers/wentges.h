@@ -6,13 +6,14 @@
 #include "gap/gap_pricing.h"
 #include "dantzig.h"
 
+template <typename RmpSolver>
 struct WentgesPrice {
     static constexpr const char* name = "Wentges";
 
-    Highs* _rmp = nullptr;
+    RmpSolver* _rmp = nullptr;
     GapInstance* _instance = nullptr;
     tf::Executor* _executor = nullptr;
-    DantzigPrice dantzig;
+    DantzigPrice<RmpSolver> dantzig;
 
     double best_reduced_cost = kHighsInf;
     double alpha = 0.0;
@@ -21,7 +22,7 @@ struct WentgesPrice {
     std::vector<double> dual_sep, dual_in;
     std::vector<double> g_sep, g_in;
 
-    void init(tf::Executor* executor, Highs* rmp, GapInstance* instance) {
+    void init(tf::Executor* executor, RmpSolver* rmp, GapInstance* instance) {
         dantzig.init(executor, rmp, instance);
         _rmp = rmp;
         _instance = instance;

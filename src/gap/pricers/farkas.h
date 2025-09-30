@@ -6,6 +6,7 @@
 #include "gap/gap_compact.h"
 #include "block/column_generation.h"
 
+template <typename RmpSolver>
 struct DantzigFarkas {
     GapInstance* _instance = nullptr;
 	tf::Executor* _executor = nullptr;
@@ -29,10 +30,11 @@ struct DantzigFarkas {
     }
 };
 
+template <typename RmpSolver>
 struct LagrangeTemplateFarkas {
     GapInstance* _instance = nullptr;
     tf::Executor* _executor = nullptr;
-    LagrangeTemplatePrice _template;
+    LagrangeTemplatePrice<RmpSolver> _template;
 
     template <typename Pricer>
     void init(tf::Executor* executor, Pricer& pricer, PricingBlockVector<GapPricing>& pricing, GapCompact& lp) {
@@ -61,18 +63,19 @@ struct LagrangeTemplateFarkas {
     }
 };
 
+template <typename RmpSolver>
 struct TemplateFarkas {
     GapInstance* _instance = nullptr;
     TemplatePricing _template;
 	tf::Executor* _executor = nullptr;
-    std::unique_ptr<PricingBlockVector<GapPricingMIP>> _mip;
+    std::unique_ptr<PricingBlockVector<GapPricingMIP<RmpSolver>>> _mip;
 
     template <typename Pricer>
     void init(tf::Executor* executor, Pricer& pricer, PricingBlockVector<GapPricing>& pricing, GapCompact& lp) {
         _instance = pricer._instance;
 		_executor = executor;
         _template.init(_instance->machines, _instance->jobs);
-        _mip.reset(new PricingBlockVector<GapPricingMIP>(_instance->machines));
+        _mip.reset(new PricingBlockVector<GapPricingMIP<RmpSolver>>(_instance->machines));
         _mip->init(*_instance);
 
         const auto& solution = lp._solution;
