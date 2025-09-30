@@ -12,6 +12,7 @@ struct Parameters {
 	int nodes = 1; // 0 for farkas, 1 for root node (> 0 for branching, support has been removed)
 	int num_threads = 1;
 	bool show_output = true;
+	char solver[7] = "highs"; // Options: highs, gurobi
 	std::string column_retention = "low"; // Options: low, med, high
 };
 

@@ -5,8 +5,8 @@
 #include "highs/parallel/HighsParallel.h"
 
 struct CsvSchema {
-	static constexpr char const* header = "instance,algorithm,retention,replication,iterations,lb,ub,gap,obj,redcost,basis,cols,rmptime,cgtime,time,lpiters,lpiters_per_second,lpiters_per_column,has_integer,timeout,last";
-	static constexpr char const* format = "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}";
+	static constexpr char const* header = "instance,algorithm,solver,retention,replication,iterations,lb,ub,gap,obj,redcost,basis,cols,rmptime,cgtime,time,lpiters,lpiters_per_second,lpiters_per_column,has_integer,timeout,last";
+	static constexpr char const* format = "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}";
 };
 
 // PricingBlockArray has a fixed number of blocks, and each block has a different pricing problem

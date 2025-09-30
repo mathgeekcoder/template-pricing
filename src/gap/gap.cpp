@@ -150,7 +150,7 @@ int GapSolver<RmpSolver>::solve(PricerType& pricer, FarkasPricerType& pricer_far
     double _rmpLB = rmp->getObjectiveValue();
     updateCompactSolution();
     tbl.output(iteration_count, _LB, _UB, "-", _rmpLB, "-", basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
-	csv_writer.append_row(instance.name, pricer.name, params.column_retention, params.replication, iteration_count, 
+	csv_writer.append_row(instance.name, pricer.name, params.solver, params.column_retention, params.replication, iteration_count, 
         _LB, _UB, "", _rmpLB, "", basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), 
         lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), lp_iteration_count / static_cast<double>(rmp->getNumCol()), int(basis_size == instance.machines), int(false), -1);
 
@@ -202,7 +202,7 @@ cg_time.pause();
                 break;
 
             // logging
-            csv_writer.append_row(instance.name, pricer.name, params.column_retention, params.replication, iteration_count, 
+            csv_writer.append_row(instance.name, pricer.name, params.solver, params.column_retention, params.replication, iteration_count,
                 _LB, _UB, gap * 100, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), 
                 lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), lp_iteration_per_column, int(basis_size==instance.machines), int(false), 0);
 
@@ -220,7 +220,7 @@ cg_time.pause();
 	double lb = std::ceil(_LB - 1e-6);
     double gap = std::abs(100.0 * (_UB - lb) / _UB);
     tbl.output(iteration_count, lb, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
-    csv_writer.append_row(instance.name, pricer.name, params.column_retention, params.replication, iteration_count, 
+    csv_writer.append_row(instance.name, pricer.name, params.solver, params.column_retention, params.replication, iteration_count,
         _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), 
         lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), avg_pivots_per_column, int(!std::isnan(gap)), int((params.timeout > 0 && total_time.TotalSeconds() > params.timeout)), 1);
 

@@ -36,6 +36,7 @@ int solve_gap(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::Front
     params.num_threads = num_threads;
     params.column_retention = keep_cols;
 	params.replication = replication;
+    strcpy(params.solver, (std::is_same<RmpSolver, Highs>() ? "highs" : "gurobi"));
 
     if (keep_cols == "low") {
         params.age_limit = 5;
@@ -54,7 +55,7 @@ int solve_gap(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::Front
         return -1;
     }
 
-	std::cout << "Solver: " << (std::is_same<RmpSolver, Highs>() ? "HiGHS" : "Gurobi") << std::endl;
+	std::cout << "Solver: " << params.solver << std::endl;
     std::cout << "Replication: " << replication << std::endl;
     std::cout << "Random seed: " << params.random_seed << std::endl;
     std::cout << "Pricing method: " << pricing_method << std::endl;
@@ -223,8 +224,8 @@ int main(int argc, char* argv[]) {
 
     for (int replication = 1; replication <= num_replications; ++replication) {
         taskflow.for_each(filePaths.begin(), filePaths.end(), [&, replication](const fs::path& filename) {
-			std::string log_filename = std::format("{}-{}-{}-output-{}.csv", filename.filename().string(), method, keep_cols, replication);
-            
+			std::string log_filename = std::format("{}-{}-{}-{}-output-{}.csv", filename.filename().string(), method, keep_cols, replication, use_gurobi ? "gurobi": "highs");
+
             // check to see if output already exists, and if has been completed
             if (!force && has_completed(log_filename)) {
                 std::cout << "Skipping " << filename.filename().string() << " (log exists and completed): " << log_filename << std::endl;
