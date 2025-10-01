@@ -65,16 +65,16 @@ int solve_gap(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::Front
     GapSolver<RmpSolver> m(filename.string(), params, csv_writer);
 
     if (pricing_method == "mip_template") {
-        return m.solve<TemplatePrice<RmpSolver>, TemplateFarkas<RmpSolver>>();
+        return m.template solve<TemplatePrice<RmpSolver>, TemplateFarkas<RmpSolver>>();
     }
     else if (pricing_method == "lagrange_template") {
-        return m.solve<LagrangeTemplatePrice<RmpSolver>, LagrangeTemplateFarkas<RmpSolver>>();
+        return m.template solve<LagrangeTemplatePrice<RmpSolver>, LagrangeTemplateFarkas<RmpSolver>>();
     }
     else if (pricing_method == "wentges") {
-        return m.solve<WentgesPrice<RmpSolver>, DantzigFarkas<RmpSolver>>();
+        return m.template solve<WentgesPrice<RmpSolver>, DantzigFarkas<RmpSolver>>();
     }
     else if (pricing_method == "dantzig") {
-        return m.solve<DantzigPrice<RmpSolver>, DantzigFarkas<RmpSolver>>();
+        return m.template solve<DantzigPrice<RmpSolver>, DantzigFarkas<RmpSolver>>();
     }
     else {
         std::cerr << "Unsupported pricing method: " << pricing_method << std::endl;
