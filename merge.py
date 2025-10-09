@@ -7,7 +7,7 @@ def main():
     parser = argparse.ArgumentParser(description="Merge all CSV files for a given path")
     parser.add_argument('pattern', nargs='+', default='*.csv', help="File pattern to match CSV files (default: '*.csv')")
     parser.add_argument('-o', '--output', default='join.csv', help="Output filename (default: 'join.csv')")
-    parser.add_argument('-x', '--exclude', action='store_true', help="Excludes all rows where column 'last' != '1' (default: False)")
+    parser.add_argument('-x', '--exclude', action='store_true', help="Excludes all rows where column 'last' == '0' (default: False)")
     args = parser.parse_args()
 
     output_path = os.path.abspath(args.output)
@@ -29,7 +29,7 @@ def main():
         df = pl.read_csv(f, infer_schema=False)
 
         if args.exclude:
-            df = df.filter(df["last"] == "1")
+            df = df.filter(df["last"] != "0")
 
         frames.append(df)
         print(f"Loaded: {os.path.basename(f)}")
