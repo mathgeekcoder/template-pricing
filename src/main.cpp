@@ -398,6 +398,8 @@ bool parameter_sweep(argparse::ArgumentParser& program, std::vector<fs::path>& f
                 }
             }
         }
+
+        return true;
     }
     else
     {
