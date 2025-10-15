@@ -1,8 +1,10 @@
 #pragma once
 #include <numeric>
+#include <string>
+#include <format>
 
 struct Parameters {
-	double timeout = 21600;  // 6 hours
+	double time_limit = 21600;  // 6 hours
 	double gap = 0.00001;	 // 0.001% gap
 	double max_col_multiplier = 1;
 	double age_limit = 1;
@@ -14,5 +16,17 @@ struct Parameters {
 	bool show_output = true;
 	char solver[7] = "highs"; // Options: highs, gurobi
 	std::string column_retention = "low"; // Options: low, med, high
+
+	std::string to_json() const {
+		return std::format(
+			"{{timeout:{},max_col_multiplier:{},age_limit:{},random_seed:{},replication:{},num_threads:{}}}",
+			time_limit,
+			max_col_multiplier,
+			age_limit,
+			random_seed,
+			replication,
+			num_threads
+		);
+	}
 };
 

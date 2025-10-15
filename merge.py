@@ -11,6 +11,7 @@ def main():
     args = parser.parse_args()
 
     output_path = os.path.abspath(args.output)
+    cols = None
 
     if os.path.exists(output_path):
         confirm = input(f"Output file {args.output} already exists. Overwrite? (y/N): ").strip().lower()
@@ -31,8 +32,14 @@ def main():
         if args.exclude:
             df = df.filter(df["last"] != "0")
 
+        if cols is None:
+            cols = df.shape[1]
+        elif df.shape[1] != cols:
+            print(f"Skipping {os.path.basename(f)}: column count {df.shape[1]} does not match expected {cols}")
+            exit()
+
         frames.append(df)
-        print(f"Loaded: {os.path.basename(f)}")
+        print(f"Loaded: {os.path.basename(f)} [{df.shape[0]} rows]")
 
     if frames:
         try:

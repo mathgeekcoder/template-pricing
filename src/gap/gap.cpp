@@ -82,6 +82,7 @@ void AgeColumnManagement<RmpSolver>::reduce(uint32_t iteration_count) {
 			_age.erase(_age.begin() + *it);
 		}
         _rmp->deleteCols(static_cast<int>(indices_to_remove.size()), indices_to_remove.data());
+        //printf("  Reducing columns from %d -> %d [%d] (basis %d), iteration %d\n", num_col, num_col-indices_to_remove.size(), indices_to_remove.size(), basis_size, iteration_count);
     }
 }
 
@@ -149,10 +150,12 @@ int GapSolver<RmpSolver>::solve(PricerType& pricer, FarkasPricerType& pricer_far
 
     double _rmpLB = rmp->getObjectiveValue();
     updateCompactSolution();
+	std::string params_json = params.to_json();
+
     tbl.output(iteration_count, _LB, _UB, "-", _rmpLB, "-", basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
 	csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, params.column_retention, params.replication, iteration_count,
         _LB, _UB, "", _rmpLB, "", basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), 
-        lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), lp_iteration_count / static_cast<double>(rmp->getNumCol()), int(basis_size == instance.machines), int(false), -1);
+        lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), lp_iteration_count / static_cast<double>(rmp->getNumCol()), int(basis_size == instance.machines), int(false), params_json, -1);
 
     // primal simplex for warm-start "add columns"
     rmp->setOptionValue("simplex_strategy", "4");
@@ -204,7 +207,7 @@ cg_time.pause();
             // logging
             csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, params.column_retention, params.replication, iteration_count,
                 _LB, _UB, gap * 100, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), 
-                lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), lp_iteration_per_column, int(basis_size==instance.machines), int(false), 0);
+                lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), lp_iteration_per_column, int(basis_size==instance.machines), int(false), "", 0);
 
             if (iteration_count % ITERATION_OUTPUT == 0 && total_time.TotalSeconds() - previous_logging_time > ITERATION_TIME) {
                 tbl.output(iteration_count, _LB, _UB, gap * 100, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
@@ -214,7 +217,7 @@ cg_time.pause();
             ++iteration_count;
             avg_pivots_per_column = ((iteration_count - 1) * avg_pivots_per_column + lp_iteration_per_column) / static_cast<double>(iteration_count);
 
-        } while (added_columns > 0 && (params.timeout < 0 || total_time.TotalSeconds() < params.timeout) && !should_stop);
+        } while (added_columns > 0 && (params.time_limit < 0 || total_time.TotalSeconds() < params.time_limit) && !should_stop);
     }
 
 	double lb = std::ceil(_LB - 1e-6);
@@ -222,7 +225,7 @@ cg_time.pause();
     tbl.output(iteration_count, lb, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
     csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, params.column_retention, params.replication, iteration_count,
         _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), 
-        lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), avg_pivots_per_column, int(!std::isnan(gap)), int((params.timeout > 0 && total_time.TotalSeconds() > params.timeout)), 1);
+        lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), avg_pivots_per_column, int(!std::isnan(gap)), int((params.time_limit > 0 && total_time.TotalSeconds() > params.time_limit)), params_json, 1);
 
     std::cout << std::format("\n"
 		"Inst : {}\n"
