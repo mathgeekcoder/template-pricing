@@ -221,10 +221,28 @@ cg_time.pause();
     }
 
 	double lb = std::ceil(_LB - 1e-6);
-    double gap = std::abs(100.0 * (_UB - lb) / _UB);
+    double gap = (_UB - lb) / _UB;
     tbl.output(iteration_count, lb, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
+
+	// provide additional status information
+	int last_status = 0;
+
+    if (gap < params.gap || lb + 1e-6 >= _rmpLB)
+        last_status = 2; // gap
+    else if (added_columns == 0)
+        last_status = 3; // optimal
+    else if (params.time_limit > 0 && total_time.TotalSeconds() > params.time_limit)
+        last_status = -4; // time limit
+    else if (should_stop)
+		last_status = -5; // user interrupt
+
     csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, params.column_retention, params.replication, iteration_count,
-        _LB, _UB, gap, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), 
+        _LB, _UB, std::abs(gap*100), _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(),
+        lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), avg_pivots_per_column, int(!std::isnan(gap)), int((params.time_limit > 0 && total_time.TotalSeconds() > params.time_limit)), params_json, last_status);
+
+	// final entry
+    csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, params.column_retention, params.replication, iteration_count,
+        _LB, _UB, std::abs(gap * 100), _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(),
         lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), avg_pivots_per_column, int(!std::isnan(gap)), int((params.time_limit > 0 && total_time.TotalSeconds() > params.time_limit)), params_json, 1);
 
     std::cout << std::format("\n"
