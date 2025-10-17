@@ -355,9 +355,9 @@ bool parameter_sweep(argparse::ArgumentParser& program, std::vector<fs::path>& f
         }
 
         // parameter sweep for column retention
-        for (int age_limit = age_limit_start; age_limit <= age_limit_end; age_limit += age_limit_step) {
-            for (double max_col_multiplier = multiplier_start; max_col_multiplier <= multiplier_end; max_col_multiplier += multiplier_step) {
-                for (int replication = 1; replication <= program.get<int>("--replications"); ++replication) {
+        for (int replication = 1; replication <= program.get<int>("--replications"); ++replication) {
+            for (int age_limit = age_limit_start; age_limit <= age_limit_end; age_limit += age_limit_step) {
+                for (double max_col_multiplier = multiplier_start; max_col_multiplier <= multiplier_end; max_col_multiplier += multiplier_step) {
 
                     taskflow.for_each(filePaths.begin(), filePaths.end(), [&, replication, age_limit, max_col_multiplier](const fs::path& filename) {
                         Parameters params;
