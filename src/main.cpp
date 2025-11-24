@@ -21,39 +21,40 @@ bool parameter_sweep(argparse::ArgumentParser& program, std::vector<fs::path>& f
 
 template <typename RmpSolver>
 int solve_gap(const fs::path& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer, std::string& pricing_method, Parameters& params) {
-    if (params.column_retention == "best") {
-        if (pricing_method == "lagrange_template") {
-            params.column_retention = "low";
-        }
-        else if (pricing_method == "mip_template" || pricing_method == "wentges") {
-            params.column_retention = "med";
-        }
-        else if (pricing_method == "dantzig") {
-            params.column_retention = "high";
-        }
-    }
+    //if (params.column_retention == "best") {
+    //    if (pricing_method == "lagrange_template") {
+    //        params.column_retention = "low";
+    //    }
+    //    else if (pricing_method == "mip_template" || pricing_method == "wentges") {
+    //        params.column_retention = "med";
+    //    }
+    //    else if (pricing_method == "dantzig") {
+    //        params.column_retention = "high";
+    //    }
+    //}
 
-    if (params.column_retention == "low") {
-        params.age_limit = 5;
-        params.max_col_multiplier = 1.5;
-    }
-    else if (params.column_retention == "med") {
-        params.age_limit = 10;
-        params.max_col_multiplier = 2;
-    }
-    else if (params.column_retention == "high") {
-        params.age_limit = 250;
-        params.max_col_multiplier = 5;
-    }
-    else if (params.column_retention != "custom") {
-        std::cerr << "Unsupported column retention level: " << params.column_retention << std::endl;
-        return -1;
-    }
+    //if (params.column_retention == "low") {
+    //    params.age_limit = 5;
+    //    params.max_col_multiplier = 1.5;
+    //}
+    //else if (params.column_retention == "med") {
+    //    params.age_limit = 10;
+    //    params.max_col_multiplier = 2;
+    //}
+    //else if (params.column_retention == "high") {
+    //    params.age_limit = 250;
+    //    params.max_col_multiplier = 5;
+    //}
+    //else if (params.column_retention != "custom") {
+    //    std::cerr << "Unsupported column retention level: " << params.column_retention << std::endl;
+    //    return -1;
+    //}
 
 	std::cout << "Solver: " << params.solver << std::endl;
     std::cout << "Replication: " << params.replication << std::endl;
     std::cout << "Random seed: " << params.random_seed << std::endl;
     std::cout << "Pricing method: " << pricing_method << std::endl;
+    std::cout << "Age Limit: " << params.age_limit << std::endl;
     std::cout << "Column retention: " << params.column_retention << std::endl;
     std::cout << filename.filename().string() << std::endl << std::endl;
 
@@ -173,6 +174,13 @@ int main(int argc, char* argv[]) {
 	 	.help("step size for column multiplier in column retention sweep")
 	 	.nargs(1);
 
+	 // take as a parameter a math function "--func", e.g., 0.0711*x^2 - 0.6111*x + 1
+	 // where x is the jobs/machines ratio
+	 program.add_argument("--func")
+		 .default_value(std::optional<std::string>())
+		 .help("function for determining column retention parameters based on jobs/machines ratio")
+		 .nargs(1);
+
     try {
         program.parse_args(argc, argv);
     }
@@ -185,6 +193,28 @@ int main(int argc, char* argv[]) {
     std::string input = program.get<std::string>("input");
     std::string method = program.get<std::string>("--method");
     std::string keep_cols = program.get<std::string>("--keep_cols");
+
+	// build lambda function for --func parameter
+    std::optional<std::function<void(Parameters&, int, int)>> func = std::nullopt;
+     if (program.is_used("--func")) {
+         std::string func_str = program.get<std::string>("--func");
+         func = [func_str](Parameters& params, int machines, int jobs) {
+             // very simple parser for quadratic functions of the form ax^2 + bx + c
+             // where x is jobs/machines ratio
+             double a = 0.0, b = 0.0, c = 0.0;
+             std::regex regex(R"(([+-]?\d*\.?\d*)\*?x\^2\s*([+-]\s*\d*\.?\d*)\*?x\s*([+-]\s*\d*\.?\d*))");
+             std::smatch match;
+             if (std::regex_search(func_str, match, regex)) {
+                 a = std::stod(replaceAll(match[1].str(), " ", ""));
+                 b = std::stod(replaceAll(match[2].str(), " ", ""));
+                 c = std::stod(replaceAll(match[3].str(), " ", ""));
+             }
+             double ratio = static_cast<double>(jobs) / static_cast<double>(machines);
+             double result = a * ratio * ratio + b * ratio + c;
+             params.max_col_multiplier = 1;
+             params.age_limit = std::max(1, static_cast<int>(std::ceil(result - 1e-6)));
+         };
+	 }
 
 	bool force = program.get<bool>("--force");
 	bool use_gurobi = program.get<bool>("--gurobi");
@@ -286,6 +316,12 @@ int main(int argc, char* argv[]) {
                         params.column_retention = keep_cols;
                         params.replication = replication;
                         strcpy(params.solver, (use_gurobi ? "gurobi" : "highs"));
+
+                        if (func.has_value()) {
+                            // load instance to get machines/jobs
+                            GapInstance gap_instance(filename.string());
+                            (*func)(params, gap_instance.machines, gap_instance.jobs);
+                        }
 
                         if (use_gurobi) {
 #ifdef SUPPORT_GUROBI
