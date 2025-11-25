@@ -1,5 +1,6 @@
 from __future__ import annotations
 import argparse
+from math import sqrt
 import sys
 from pathlib import Path
 import polars as pl
@@ -256,29 +257,31 @@ def main(argv=None):
     # age_limits_with_timeouts = instances.filter(pl.col('timeout') > 0)['age_limit'].unique().implode()
     # instances = instances.filter(~pl.col('age_limit').is_in(age_limits_with_timeouts))
 
+    # remove all instance that have timeouts for all age_limits
+    instances_with_timeouts = instances.filter(pl.col('timeout') == 0)['instance'].unique().implode()
+    instances = instances.filter(pl.col('instance').is_in(instances_with_timeouts))
+
     # group by instance and age_limit, compute mean time
-    instances = instances.group_by(["instance", "age_limit", 'job_machine_ratio']).agg([pl.col("time").log().mean().exp().alias("mean_time")])
+    instances = instances.group_by(["instance", "age_limit", 'job_machine_ratio']).agg([(pl.col("time")).log().mean().exp().alias("mean_time")])
 #    instances = instances.group_by(["instance", "age_limit", 'job_machine_ratio']).agg([pl.mean("time").alias("mean_time")])
 
     instances = instances.sort(['instance', 'age_limit'])
-
+    
     # take rolling mean of time over age_limit to smooth out noise
     instances = instances.with_columns([
-        pl.col("mean_time").rolling_mean(window_size=5, min_samples=2, center=True).over('instance', 'age_limit').alias("time_smoothed")
+        pl.col("mean_time").rolling_mean(window_size=5, weights=[1,2,4,2,1], min_samples=3, center=True).over('instance').alias("time_smoothed")
     ])
-
   
     instances.write_csv("sweep_raw.csv")
     
-
     # find the row with the minimum mean_time for each instance
-    best_times = instances.sort(["instance", "mean_time"]).group_by(["instance", 'job_machine_ratio']).first()
+    best_times = instances.sort(["instance", "time_smoothed"]).group_by(["instance", 'job_machine_ratio']).first()
 
     # find the smallest age_limit that is within 5% of the best mean_time for each instance
     instances = instances.join(best_times, on="instance", how="left")
     instances = instances.with_columns(
-        (pl.col("mean_time") <= 1.01 * pl.col("mean_time_right")).alias("within_5_percent"),
-        (pl.col("mean_time") - pl.col("mean_time_right")).alias("abs_diff")
+        (pl.col("time_smoothed") <= 1.01 * pl.col("time_smoothed_right")).alias("within_5_percent"),
+        (pl.col("time_smoothed") - pl.col("time_smoothed_right")).alias("abs_diff")
     )
 
     instances = instances.filter(pl.col("within_5_percent") | (pl.col("abs_diff") <= 1)) # also within 0.5 seconds
@@ -289,6 +292,52 @@ def main(argv=None):
     # sort by job_machine_ratio then best_age
     instances = instances.sort(['job_machine_ratio', 'best_age'])
     print(instances)
+
+    # want to find the tightest quadratic curve that lies above all points (job_machine_ratio, best_age)
+    max_instances = instances.group_by(pl.col('job_machine_ratio')).agg([
+        pl.col('best_age').max().alias('best_age')
+    ])
+
+    import highspy
+    h = highspy.Highs()
+    [a,b,c] = h.addVariables(3)
+    max_pt = h.addVariable()
+
+    h.addConstrs(
+        y <= a * x * x + b * x + c for (x,y) in zip(max_instances['job_machine_ratio'], max_instances['best_age'])
+    )
+    h.addConstr(c >= 1)  # age limit at least 1
+    h.addConstrs(
+        max_pt >= a * x * x + b * x + c - y for (x,y) in zip(max_instances['job_machine_ratio'], max_instances['best_age'])
+    )
+    h.minimize(max_pt)
+    print(h.vals([a,b,c,max_pt]))
+    
+    # gurobi version, but minimize quadratic distance
+    from gurobipy import Model, GRB
+    m = Model("age_limit_fit")
+    a = m.addVar(name="a")
+    b = m.addVar(name="b")
+    c = m.addVar(name="c")
+    max_dev = m.addVar(name="max_dev")
+    m.setObjective(max_dev, GRB.MINIMIZE)
+    for x, y in zip(max_instances['job_machine_ratio'], max_instances['best_age']):
+        expr = a * x * x + b * x + c
+        m.addConstr(expr >= y, name=f"cover_{x}_{y}")
+        m.addConstr(c >= 1, name="min_c")
+
+    m.addConstr(max_dev == sum((a * x * x + b * x + c - y) * (a * x * x + b * x + c - y) for (x,y) in zip(max_instances['job_machine_ratio'], max_instances['best_age'])))
+    m.optimize()
+
+    print(a.X, b.X, c.X, max_dev.X)
+
+
+    # add fitted age_limit to instances
+#    a_val, b_val, c_val = h.vals([a,b,c])
+    a_val, b_val, c_val = a.X, b.X, c.X
+    instances = instances.with_columns(
+        (a_val * pl.col('job_machine_ratio') ** 2 + b_val * pl.col('job_machine_ratio') + c_val).alias('fitted_age_limit')
+    )
 
     # write to CSV
     instances.write_csv("sweep_best_age_limits.csv")
