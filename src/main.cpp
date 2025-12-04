@@ -195,7 +195,7 @@ int main(int argc, char* argv[]) {
     std::string keep_cols = program.get<std::string>("--keep_cols");
 
 	// build lambda function for --func parameter
-    std::optional<std::function<void(Parameters&, int, int)>> func = std::nullopt;
+    std::function<void(Parameters&, int, int)> func;
      if (program.is_used("--func")) {
          std::string func_str = program.get<std::string>("--func");
          func = [func_str](Parameters& params, int machines, int jobs) {
@@ -215,6 +215,27 @@ int main(int argc, char* argv[]) {
              params.age_limit = std::max(1, static_cast<int>(std::ceil(result - 1e-6)));
          };
 	 }
+     else if (method == "wentges") {
+        func = [](Parameters& params, int machines, int jobs) {
+            double ratio = static_cast<double>(jobs) / static_cast<double>(machines);
+            params.max_col_multiplier = 1;
+            params.age_limit = std::max(1, static_cast<int>(std::ceil(0.3 * ratio + 1 - 1e-6)));
+        };
+     }
+     else if (method == "dantzig") {
+        func = [](Parameters& params, int machines, int jobs) {
+            double ratio = static_cast<double>(jobs) / static_cast<double>(machines);
+            params.max_col_multiplier = 1;
+            params.age_limit = std::max(1, static_cast<int>(std::ceil(0.081875 * ratio * ratio + 1 - 1e-6)));
+        };
+     }
+     else {
+        func = [](Parameters& params, int machines, int jobs) {
+            double ratio = static_cast<double>(jobs) / static_cast<double>(machines);
+            params.max_col_multiplier = 1;
+            params.age_limit = std::max(1, static_cast<int>(std::ceil(0.00044 * ratio * ratio + 0.0405 * ratio + 1 - 1e-6)));
+        };
+     }
 
 	bool force = program.get<bool>("--force");
 	bool use_gurobi = program.get<bool>("--gurobi");
@@ -301,53 +322,56 @@ int main(int argc, char* argv[]) {
                     return;
                 }
 
-                quill::CsvWriter<CsvSchema, quill::FrontendOptions> csv_writer(log_filename);
+                try {
+                    quill::CsvWriter<CsvSchema, quill::FrontendOptions> csv_writer(log_filename);
 
-                int result = 0;
+                    int result = 0;
 
-                // if failure: repeat replication (e.g., basis bug in HiGHS)
-                for (int retries = 20; retries >= 0; --retries) {
-                    // GAP instances
-                    if (filename.extension() == "") {
-                        Parameters params;
-                        params.time_limit = program.get<int>("--time_limit");
-                        params.random_seed = (seed == -1 ? (20 - retries) * 100 + (replication - 1) : seed);
-                        params.num_threads = num_threads;
-                        params.column_retention = keep_cols;
-                        params.replication = replication;
-                        strcpy(params.solver, (use_gurobi ? "gurobi" : "highs"));
+                    // if failure: repeat replication (e.g., basis bug in HiGHS)
+                    for (int retries = 20; retries >= 0; --retries) {
+                        // GAP instances
+                        if (filename.extension() == "") {
+                            Parameters params;
+                            params.time_limit = program.get<int>("--time_limit");
+                            params.random_seed = (seed == -1 ? (20 - retries) * 100 + (replication - 1) : seed);
+                            params.num_threads = num_threads;
+                            params.column_retention = keep_cols;
+                            params.replication = replication;
+                            strcpy(params.solver, (use_gurobi ? "gurobi" : "highs"));
 
-                        if (func.has_value()) {
                             // load instance to get machines/jobs
                             GapInstance gap_instance(filename.string());
-                            (*func)(params, gap_instance.machines, gap_instance.jobs);
-                        }
+                            func(params, gap_instance.machines, gap_instance.jobs);
 
-                        if (use_gurobi) {
-#ifdef SUPPORT_GUROBI
-                            result = solve_gap<GurobiHighs>(filename, csv_writer, method, params);
-#endif
+                            if (use_gurobi) {
+    #ifdef SUPPORT_GUROBI
+                                result = solve_gap<GurobiHighs>(filename, csv_writer, method, params);
+    #endif
+                            }
+                            else {
+                                result = solve_gap<Highs>(filename, csv_writer, method, params);
+                            }
+
+                            std::cout << std::endl;
                         }
                         else {
-                            result = solve_gap<Highs>(filename, csv_writer, method, params);
+                            std::cerr << "Unsupported file format: " << filename.extension() << std::endl;
+                            break;
                         }
 
-                        std::cout << std::endl;
-                    }
-                    else {
-                        std::cerr << "Unsupported file format: " << filename.extension() << std::endl;
-                        break;
+                        if (result == 0) {
+                            break;
+                        }
                     }
 
-                    if (result == 0) {
-                        break;
+                    // delete output
+                    if (result != 0) {
+                        std::remove(log_filename.c_str());
                     }
                 }
-
-                // delete output
-                if (result != 0) {
-                    std::remove(log_filename.c_str());
-                }
+                catch (const std::exception& e) {
+                    std::cerr << "Error processing file " << filename.filename().string() << ": " << e.what() << std::endl;
+				}
             });
         }
     }

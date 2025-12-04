@@ -80,7 +80,8 @@ double LagrangeTemplatePrice<RmpSolver>::optimize_lagrangian(const std::vector<d
     best_solution.swap(pricer.solution);
 
 	// binary search for best mu
-    while (hi_mu - lo_mu > 1e-6 && best < ub) {
+//    while (hi_mu - lo_mu > 1e-6 && best < ub) {
+    while (hi_mu > 1.001 * lo_mu && best < ub) {
         double mu = 0.5 * (hi_mu + lo_mu);
 
         for (int i = 0; i < _instance->jobs; ++i) {
