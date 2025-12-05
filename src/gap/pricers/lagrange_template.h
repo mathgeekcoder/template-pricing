@@ -10,6 +10,7 @@ struct LagrangeTemplatePrice {
     TemplatePricing _template;
 	tf::Executor* _executor;
     std::vector<double> _mu;
+    std::vector<int> _counts;
 
     void init(tf::Executor* executor, RmpSolver* rmp, GapInstance* instance) {
         _rmp = rmp;
@@ -17,6 +18,7 @@ struct LagrangeTemplatePrice {
         _template.init(instance->machines, instance->jobs);
         _mu.resize(instance->machines, 1);
 		_executor = executor;
+		_counts.resize(instance->machines, 0);
     }
 
     void update() {

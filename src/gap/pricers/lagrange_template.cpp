@@ -39,6 +39,14 @@ double LagrangeTemplatePrice<RmpSolver>::optimize(const std::vector<double>& dua
     for (int m = 0; m < _instance->machines; ++m)
         optimal_pricing += rc[m] > 1e-6 ? rc[m] : 0.0;
 
+    //for (int m = 0; m < _instance->machines; ++m) {
+    //    std::cout << (rc[m] > 1e-6 ? _mu[m] : -1) << " ";
+    //}
+    //for (int m = 0; m < _instance->machines; ++m) {
+    //    std::cout << (rc[m] > 1e-6 ? _counts[m] : -1) << " ";
+    //}
+    //std::cout << " " << optimal_pricing << std::endl;
+
     return optimal_pricing;
 }
 
@@ -55,6 +63,9 @@ double LagrangeTemplatePrice<RmpSolver>::optimize_lagrangian(const std::vector<d
     if (hi_mu == 0) {
         hi_mu = 0.5;
     }
+
+    int machine = &hi_mu - &_mu[0];
+    _counts[machine] = 0;
 
     // find first feasible hi_mu
     while (true) {
@@ -75,6 +86,7 @@ double LagrangeTemplatePrice<RmpSolver>::optimize_lagrangian(const std::vector<d
 
         lo_mu = hi_mu;
         hi_mu *= 2;
+		_counts[machine]++;
     }
 
     best_solution.swap(pricer.solution);
@@ -121,6 +133,7 @@ double LagrangeTemplatePrice<RmpSolver>::optimize_lagrangian(const std::vector<d
                 best_solution.swap(pricer.solution);
             }
         }
+        _counts[machine]++;
     }
 
     pricer.solution.swap(best_solution);
