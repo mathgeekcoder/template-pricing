@@ -14,6 +14,10 @@
 #include <format>
 #include <span>
 #include "extern/gurobi/gurobi_highs.h"
+#include <filesystem>
+#include <regex>
+
+namespace fs = std::filesystem;
 
 struct Timer
 {
@@ -523,3 +527,34 @@ private:
     std::function<void()> callback; // instance-specific callback
 };
 
+// Get input files from directory or wildcard pattern
+static std::vector<std::filesystem::path> get_input_files(std::string& input) {
+    std::vector<std::filesystem::path> filePaths;
+
+    if (fs::is_directory(input)) {
+        for (const auto& entry : fs::directory_iterator(input)) {
+            if (entry.is_regular_file()) {
+                filePaths.push_back(entry.path());
+            }
+        }
+    }
+    else {
+        // check if has wildcard character (i.e., '*')
+        if (input.find('*') != std::string::npos) {
+            std::regex regx(replaceAll(fs::path(input).filename().string(), "*", ".*"));
+            fs::path current_path(input);
+
+            for (const auto& entry : fs::directory_iterator(current_path.parent_path())) {
+                if (entry.is_regular_file() && std::regex_match(entry.path().filename().string(), regx)) {
+                    filePaths.push_back(entry.path());
+                }
+            }
+        }
+        else {
+            filePaths.push_back(fs::path(input));
+        }
+    }
+
+    std::sort(filePaths.begin(), filePaths.end());
+    return filePaths;
+}

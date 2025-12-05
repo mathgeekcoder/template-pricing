@@ -8,6 +8,8 @@
 
 template <typename RmpSolver>
 struct DantzigFarkas {
+    static constexpr const char* name = "DantzigFarkas";
+
     GapInstance* _instance = nullptr;
 	tf::Executor* _executor = nullptr;
 
@@ -32,6 +34,8 @@ struct DantzigFarkas {
 
 template <typename RmpSolver>
 struct LagrangeTemplateFarkas {
+    static constexpr const char* name = "LTFarkas";
+
     GapInstance* _instance = nullptr;
     tf::Executor* _executor = nullptr;
     LagrangeTemplatePrice<RmpSolver> _template;
@@ -65,6 +69,8 @@ struct LagrangeTemplateFarkas {
 
 template <typename RmpSolver>
 struct TemplateFarkas {
+    static constexpr const char* name = "MTFarkas";
+
     GapInstance* _instance = nullptr;
     TemplatePricing _template;
 	tf::Executor* _executor = nullptr;

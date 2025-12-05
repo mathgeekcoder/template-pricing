@@ -104,3 +104,48 @@ struct GapSolver {
     int add_columns(std::vector<double>& reduced_costs);
     double remove_duplicates();
 };
+
+template <typename RmpSolver, template<typename> class PricerType, template<typename> class FarkasPricerType>
+int solve_gap_with_farkas(GapSolver<RmpSolver>& m) {
+    return m.template solve<PricerType<RmpSolver>, FarkasPricerType<RmpSolver>>();
+}
+
+template <typename RmpSolver, template<typename> class FarkasPricerType>
+int solve_gap_with_method(GapSolver<RmpSolver>& m, const std::string& pricing_method) {
+    if (pricing_method == "mip_template") {
+        return solve_gap_with_farkas<RmpSolver, TemplatePrice, FarkasPricerType>(m);
+    }
+    else if (pricing_method == "lagrange_template") {
+        return solve_gap_with_farkas<RmpSolver, LagrangeTemplatePrice, FarkasPricerType>(m);
+    }
+    else if (pricing_method == "wentges") {
+        return solve_gap_with_farkas<RmpSolver, WentgesPrice, FarkasPricerType>(m);
+    }
+    else if (pricing_method == "dantzig") {
+        return solve_gap_with_farkas<RmpSolver, DantzigPrice, FarkasPricerType>(m);
+    }
+    else {
+        std::cerr << "Unsupported pricing method: " << pricing_method << std::endl;
+        return 0;
+    }
+}
+
+template <typename RmpSolver>
+int solve_gap(const std::string& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer, std::string& pricing_method, std::string& init_method, Parameters& params) {
+    GapSolver<RmpSolver> m(filename, params, csv_writer);
+
+    // Determine the Farkas pricer type based on the init method
+    if (init_method == "mip_template" || (init_method == "choose" && pricing_method == "mip_template")) {
+        return solve_gap_with_method<RmpSolver, TemplateFarkas>(m, pricing_method);
+    }
+    else if (init_method == "lagrange_template" || (init_method == "choose" && pricing_method == "lagrange_template")) {
+        return solve_gap_with_method<RmpSolver, LagrangeTemplateFarkas>(m, pricing_method);
+    }
+    else if (init_method == "dantzig") {
+        return solve_gap_with_method<RmpSolver, DantzigFarkas>(m, pricing_method);
+    }
+    else {
+        std::cerr << "Unsupported init method: " << init_method << std::endl;
+        return 0;
+    }
+}

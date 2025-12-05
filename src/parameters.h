@@ -15,7 +15,6 @@ struct Parameters {
 	int num_threads = 1;
 	bool show_output = true;
 	char solver[7] = "highs"; // Options: highs, gurobi
-	std::string column_retention = "low"; // Options: low, med, high
 
 	std::string to_json() const {
 		return std::format(

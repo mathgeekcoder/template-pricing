@@ -10,37 +10,44 @@
 #include <filesystem>
 #include "utils.h"
 
-// Supported template instantiations
-template class DantzigPrice<Highs>;
+// Pricer types
+template <typename RmpSolver>
+struct PricerTypes {
+    using types = std::tuple<
+        DantzigPrice<RmpSolver>,
+        WentgesPrice<RmpSolver>,
+        TemplatePrice<RmpSolver>,
+        LagrangeTemplatePrice<RmpSolver>
+    >;
+};
 
-template class DantzigFarkas<Highs>;
-template class LagrangeTemplateFarkas<Highs>;
-template class TemplateFarkas<Highs>;
+// Farkas types
+template <typename RmpSolver>
+struct FarkasPricerTypes {
+    using types = std::tuple<
+        DantzigFarkas<RmpSolver>,
+        TemplateFarkas<RmpSolver>,
+        LagrangeTemplateFarkas<RmpSolver>
+    >;
+};
 
-template int GapSolver<Highs>::solve(DantzigPrice<Highs>& pricer, DantzigFarkas<Highs>& pricer_farkas);
-template int GapSolver<Highs>::solve(WentgesPrice<Highs>& pricer, DantzigFarkas<Highs>& pricer_farkas);
-template int GapSolver<Highs>::solve(TemplatePrice<Highs>& pricer, TemplateFarkas<Highs>& pricer_farkas);
-template int GapSolver<Highs>::solve(LagrangeTemplatePrice<Highs>& pricer, LagrangeTemplateFarkas<Highs>& pricer_farkas);
+// Helper to instantiate all combinations of GapSolver<RmpSolver>::solve<Pricer, FarkasPricer> function
+template <typename RmpSolver, typename Pricer, typename... FarkasPricers>
+void instantiate_solve_combinations(std::tuple<FarkasPricers...>*) {
+    ((void)static_cast<int (GapSolver<RmpSolver>::*)(Pricer&, FarkasPricers&)>(
+        &GapSolver<RmpSolver>::template solve<Pricer, FarkasPricers>), ...);
+}
 
-template bool GapSolver<Highs>::restoreFeasibility(DantzigFarkas<Highs>& pricer_farkas);
-template bool GapSolver<Highs>::restoreFeasibility(TemplateFarkas<Highs>& pricer_farkas);
+template <typename RmpSolver, typename... Pricers>
+void instantiate_all_pricers(std::tuple<Pricers...>*) {
+    (instantiate_solve_combinations<RmpSolver, Pricers>(
+        static_cast<typename FarkasPricerTypes<RmpSolver>::types*>(nullptr)), ...);
+}
+
+template void instantiate_all_pricers<Highs>(PricerTypes<Highs>::types*);
 
 #ifdef SUPPORT_GUROBI
-
-template class DantzigPrice<GurobiHighs>;
-
-template class DantzigFarkas<GurobiHighs>;
-template class LagrangeTemplateFarkas<GurobiHighs>;
-template class TemplateFarkas<GurobiHighs>;
-
-template int GapSolver<GurobiHighs>::solve(DantzigPrice<GurobiHighs>& pricer, DantzigFarkas<GurobiHighs>& pricer_farkas);
-template int GapSolver<GurobiHighs>::solve(WentgesPrice<GurobiHighs>& pricer, DantzigFarkas<GurobiHighs>& pricer_farkas);
-template int GapSolver<GurobiHighs>::solve(TemplatePrice<GurobiHighs>& pricer, TemplateFarkas<GurobiHighs>& pricer_farkas);
-template int GapSolver<GurobiHighs>::solve(LagrangeTemplatePrice<GurobiHighs>& pricer, LagrangeTemplateFarkas<GurobiHighs>& pricer_farkas);
-
-template bool GapSolver<GurobiHighs>::restoreFeasibility(DantzigFarkas<GurobiHighs>& pricer_farkas);
-template bool GapSolver<GurobiHighs>::restoreFeasibility(TemplateFarkas<GurobiHighs>& pricer_farkas);
-
+template void instantiate_all_pricers<GurobiHighs>(PricerTypes<GurobiHighs>::types*);
 #endif
 
 template <typename RmpSolver>
@@ -153,7 +160,7 @@ int GapSolver<RmpSolver>::solve(PricerType& pricer, FarkasPricerType& pricer_far
 	std::string params_json = params.to_json();
 
     tbl.output(iteration_count, _LB, _UB, "-", _rmpLB, "-", basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
-	csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, params.column_retention, params.replication, iteration_count,
+    csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, pricer_farkas.name, params.replication, iteration_count,
         _LB, _UB, "", _rmpLB, "", basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), 
         lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), lp_iteration_count / static_cast<double>(rmp->getNumCol()), int(basis_size == instance.machines), int(false), params_json, -1);
 
@@ -205,7 +212,7 @@ cg_time.pause();
                 break;
 
             // logging
-            csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, params.column_retention, params.replication, iteration_count,
+            csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, pricer_farkas.name, params.replication, iteration_count,
                 _LB, _UB, gap * 100, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), 
                 lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), lp_iteration_per_column, int(basis_size==instance.machines), int(false), "", 0);
 
@@ -236,13 +243,13 @@ cg_time.pause();
     else if (should_stop)
 		last_status = -5; // user interrupt
 
-    csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, params.column_retention, params.replication, iteration_count,
+    csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, pricer_farkas.name, params.replication, iteration_count,
         _LB, _UB, std::abs(gap*100), _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(),
         lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), avg_pivots_per_column, int(!std::isnan(gap)), int((params.time_limit > 0 && total_time.TotalSeconds() > params.time_limit)), params_json, last_status);
 
 	// final entry only if not user interrupted
     if (!should_stop) {
-        csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, params.column_retention, params.replication, iteration_count,
+        csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, pricer_farkas.name, params.replication, iteration_count,
             _LB, _UB, std::abs(gap * 100), _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(),
             lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), avg_pivots_per_column, int(!std::isnan(gap)), int((params.time_limit > 0 && total_time.TotalSeconds() > params.time_limit)), params_json, 1);
     }
