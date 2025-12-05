@@ -128,7 +128,7 @@ def main(argv=None):
           .str.replace("MipTemplate", "MT")
     ])
 
-    
+
     # best filter
     best_retention_filter = (
         ((pl.col("algorithm") == "Dantzig") & (pl.col("retention") == "high")) |
@@ -174,7 +174,7 @@ def main(argv=None):
               geo_expr("cgtime"),
               geo_expr("lpiters_per_second"),
               geo_expr("lpiters_per_column")
-          ] 
+          ]
             + boxplot_expr("rmptime")
             + boxplot_expr("cgtime")
             + boxplot_expr("lpiters_per_second")
@@ -250,11 +250,54 @@ def main(argv=None):
          .drop("_alg_order")
     )
 
+
+    # number solved vs time to solve
+    # want "method,count,time_to_solve"
+    # where count is cumulative number of instances solved by time_to_solve,
+    # and time_to_solve is quantized in a log scale (e.g., seconds, minutes, hours)
+    solved_vs_time = (df.filter(best_retention_filter)
+                        .filter(pl.col("last") == 1)
+                        .with_columns([(pl.col("time") // 1).alias("time_to_solve")])
+    )
+
+    all_times = (solved_vs_time
+                 .select(pl.col("time_to_solve"))
+                 .unique()
+                 .sort("time_to_solve")['time_to_solve'].to_list())
+
+    # create a complete set of time_to_solve values for each algorithm
+    solved_vs_time = (solved_vs_time
+        .group_by(['algorithm',"time_to_solve"])
+            .agg([pl.col("instance").count().alias("count")])
+        .sort(['algorithm',"time_to_solve"])
+        .with_columns(
+            pl.col("count").cum_sum().over('algorithm').alias("cumsum")
+        )
+        .pivot(values="cumsum", index="time_to_solve", columns="algorithm")
+        .sort("time_to_solve")
+        .fill_null(strategy='forward')
+    )
+
+
+    # violin plot data for time to solve by algorithm
+    violin_data = (df
+        .filter(best_retention_filter)
+        .filter(pl.col("last") == 1)
+        # add column with instance-replication to ensure uniqueness
+        .with_columns(
+            (pl.col("instance") + "_" + pl.col("replication").cast(pl.Utf8)).alias("unique_instance")
+        )
+        .pivot(values="time", index="unique_instance", columns="algorithm")
+    )
+
+    # print results
     print(farkas)
     print(column_retention)
     print(best)
     print(degeneracy)
     print(instances)
+    print(solved_vs_time)
+    print(violin_data)
 
     try:
         import xlsxwriter
@@ -266,6 +309,12 @@ def main(argv=None):
             best.write_excel(workbook=workbook, worksheet="best", autofilter=False, autofit=True)
             degeneracy.write_excel(workbook=workbook, worksheet="degeneracy", autofilter=False, autofit=True)
             instances.write_excel(workbook=workbook, worksheet="instances", autofilter=False, autofit=True)
+            solved_vs_time.write_excel(workbook=workbook,
+                                       worksheet="solved_vs_time",
+                                       autofilter=False,
+                                       autofit=True)
+            violin_data.write_excel(workbook=workbook, worksheet="violin_data", autofilter=False, autofit=True)
+
     except:
         print("xlsxwriter not available, skipping Excel output")
         farkas.write_csv("agg_farkas.csv")
