@@ -131,21 +131,21 @@ int solve_gap_with_method(GapSolver<RmpSolver>& m, const std::string& pricing_me
 }
 
 template <typename RmpSolver>
-int solve_gap(const std::string& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer, std::string& pricing_method, std::string& init_method, Parameters& params) {
+int solve_gap(const std::string& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer, Parameters& params) {
     GapSolver<RmpSolver> m(filename, params, csv_writer);
 
     // Determine the Farkas pricer type based on the init method
-    if (init_method == "mip_template" || (init_method == "auto" && pricing_method == "mip_template")) {
-        return solve_gap_with_method<RmpSolver, TemplateFarkas>(m, pricing_method);
+    if (params.init_method == "mip_template" || (params.init_method == "auto" && params.pricing_method == "mip_template")) {
+        return solve_gap_with_method<RmpSolver, TemplateFarkas>(m, params.pricing_method);
     }
-    else if (init_method == "lagrange_template" || (init_method == "auto" && pricing_method == "lagrange_template")) {
-        return solve_gap_with_method<RmpSolver, LagrangeTemplateFarkas>(m, pricing_method);
+    else if (params.init_method == "lagrange_template" || (params.init_method == "auto" && params.pricing_method == "lagrange_template")) {
+        return solve_gap_with_method<RmpSolver, LagrangeTemplateFarkas>(m, params.pricing_method);
     }
-    else if (init_method == "dantzig") {
-        return solve_gap_with_method<RmpSolver, DantzigFarkas>(m, pricing_method);
+    else if (params.init_method == "dantzig") {
+        return solve_gap_with_method<RmpSolver, DantzigFarkas>(m, params.pricing_method);
     }
     else {
-        std::cerr << "Unsupported init method: " << init_method << std::endl;
+        std::cerr << "Unsupported init method: " << params.init_method << std::endl;
         return 0;
     }
 }

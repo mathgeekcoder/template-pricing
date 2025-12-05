@@ -15,6 +15,8 @@ struct Parameters {
 	int num_threads = 1;
 	bool show_output = true;
 	char solver[7] = "highs"; // Options: highs, gurobi
+	std::string pricing_method;
+	std::string init_method;
 
 	std::string to_json() const {
 		return std::format(

@@ -28,6 +28,31 @@ std::function<void(Parameters&, int, int)> quadratic_column_retention_func(doubl
     };
 }
 
+int solve_gap_instance(const fs::path& filename, std::string& log_filename, Parameters& params) {
+    int result = 0;
+    quill::CsvWriter<CsvSchema, quill::FrontendOptions> csv_writer(log_filename);
+
+    std::cout << "Solver: " << params.solver << std::endl
+              << "#Rep  : " << params.replication << std::endl
+              << "Seed  : " << params.random_seed << std::endl
+              << "Age   : " << params.age_limit << std::endl
+              << "Farkas: " << params.init_method << std::endl
+              << "Pricer: " << params.pricing_method << std::endl
+              << "Inst  : " << filename.filename().string() << std::endl << std::endl;
+
+    if (params.solver[0] == 'g') {
+#ifdef SUPPORT_GUROBI
+        result = solve_gap<GurobiHighs>(filename.string(), csv_writer, params);
+#endif
+    }
+    else {
+        result = solve_gap<Highs>(filename.string(), csv_writer, params);
+    }
+
+    std::cout << std::endl;
+	return result;
+}
+
 int main(int argc, char* argv[]) {
     argparse::ArgumentParser program("colgen_pricing");
     program.set_usage_max_line_width(80);
@@ -188,8 +213,6 @@ int main(int argc, char* argv[]) {
                 }
 
                 try {
-                    quill::CsvWriter<CsvSchema, quill::FrontendOptions> csv_writer(log_filename);
-
                     int result = 0;
 
                     // if failure: repeat replication (e.g., basis bug in HiGHS)
@@ -202,29 +225,14 @@ int main(int argc, char* argv[]) {
                             params.num_threads = num_threads;
                             params.replication = replication;
                             strcpy(params.solver, (use_gurobi ? "gurobi" : "highs"));
+                            params.init_method = init_method;
+                            params.pricing_method = pricing_method;
 
                             // load instance to get machines/jobs
                             GapInstance gap_instance(filename.string());
                             set_age_limit(params, gap_instance.machines, gap_instance.jobs);
 
-                            std::cout << "Solver: " << params.solver << std::endl;
-                            std::cout << "Replication: " << params.replication << std::endl;
-                            std::cout << "Random seed: " << params.random_seed << std::endl;
-                            std::cout << "Init method: " << init_method << std::endl;
-                            std::cout << "Pricing method: " << pricing_method << std::endl;
-                            std::cout << "Age Limit: " << params.age_limit << std::endl;
-                            std::cout << filename.filename().string() << std::endl << std::endl;
-
-                            if (use_gurobi) {
-    #ifdef SUPPORT_GUROBI
-                                result = solve_gap<GurobiHighs>(filename.string(), csv_writer, pricing_method, init_method, params);
-    #endif
-                            }
-                            else {
-                                result = solve_gap<Highs>(filename.string(), csv_writer, pricing_method, init_method, params);
-                            }
-
-                            std::cout << std::endl;
+							result = solve_gap_instance(filename, log_filename, params);
                         }
                         else {
                             std::cerr << "Unsupported file format: " << filename.extension() << std::endl;
@@ -277,6 +285,7 @@ bool parameter_sweep(argparse::ArgumentParser& program, std::vector<fs::path>& f
         int age_start = program.get<int>("--age_start");
         int age_end = program.get<int>("--age_end");
         int age_step = program.get<int>("--age_step");
+
         double multiplier_start = program.get<double>("--multiplier_start");
         double multiplier_end = program.get<double>("--multiplier_end");
         double multiplier_step = program.get<double>("--multiplier_step");
@@ -298,15 +307,15 @@ bool parameter_sweep(argparse::ArgumentParser& program, std::vector<fs::path>& f
                         params.num_threads = program.get<int>("--threads");
                         params.replication = replication;
                         strcpy(params.solver, (program.get<bool>("--gurobi") ? "gurobi" : "highs"));
-                        std::string method = program.get<std::string>("--method");
-                        std::string init_method = program.get<std::string>("--init");
+                        params.init_method = program.get<std::string>("--init");
+                        params.pricing_method = program.get<std::string>("--method");
 
                         params.age_limit = age_limit;
                         params.max_col_multiplier = max_col_multiplier;
                         std::cout << "Age limit: " << params.age_limit << ", Column multiplier: " << params.max_col_multiplier << std::endl;
 
                         std::string log_filename = std::format("{}-{}-custom-output-{}-{}-{}-{}.csv",
-                            filename.filename().string(), method, params.replication, params.solver, params.age_limit, params.max_col_multiplier);
+                            filename.filename().string(), params.pricing_method, params.replication, params.solver, params.age_limit, params.max_col_multiplier);
 
                         // check to see if output already exists, and if has been completed
                         if (!program.get<bool>("--force") && has_completed(log_filename)) {
@@ -314,26 +323,7 @@ bool parameter_sweep(argparse::ArgumentParser& program, std::vector<fs::path>& f
                             return;
                         }
 
-                        quill::CsvWriter<CsvSchema, quill::FrontendOptions> csv_writer(log_filename);
-
-                        std::cout << "Solver: " << params.solver << std::endl;
-                        std::cout << "Replication: " << params.replication << std::endl;
-                        std::cout << "Random seed: " << params.random_seed << std::endl;
-                        std::cout << "Pricing method: " << method << std::endl;
-                        std::cout << "Init method: " << init_method << std::endl;
-                        std::cout << "Age Limit: " << params.age_limit << std::endl;
-                        std::cout << filename.filename().string() << std::endl << std::endl;
-
-                        if (program.get<bool>("--gurobi")) {
-#ifdef SUPPORT_GUROBI
-                            solve_gap<GurobiHighs>(filename.string(), csv_writer, method, init_method, params);
-#endif
-                        }
-                        else {
-                            solve_gap<Highs>(filename.string(), csv_writer, method, init_method, params);
-                        }
-
-                        std::cout << std::endl;
+                        solve_gap_instance(filename, log_filename, params);
                     });
                 }
             }
@@ -372,6 +362,8 @@ std::function<void(Parameters&, int, int)> column_retention_func(const std::stri
     }
 }
 
+// check if log file indicates completed run (ends with ",1")
+// this will not be the case if the program crashed or was interrupted (Ctrl-C)
 bool has_completed(const std::string& log_filename) {
     if (fs::exists(log_filename)) {
         try {
