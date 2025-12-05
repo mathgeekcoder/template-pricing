@@ -50,9 +50,9 @@ int main(int argc, char* argv[]) {
         .choices("mip_template", "lagrange_template", "wentges", "dantzig");
 
     program.add_argument("-i", "--init")
-        .default_value(std::string("choose"))
-        .help("initialization pricing method: {mip_template, lagrange_template, dantzig, choose}")
-        .choices("mip_template", "lagrange_template", "dantzig", "choose");
+        .default_value(std::string("auto"))
+        .help("initialization pricing method: {mip_template, lagrange_template, dantzig, auto}")
+        .choices("mip_template", "lagrange_template", "dantzig", "auto");
 
     program.add_argument("-s", "--seed")
         .default_value(-1)
@@ -146,7 +146,7 @@ int main(int argc, char* argv[]) {
         return 1;
 	}
 
-    // build lambda function for --func parameter (or "choose" defaults)
+    // build lambda function for --func parameter (or "method" defaults)
     auto set_age_limit = column_retention_func(program.is_used("--func") ? program.get<std::string>("--func") : pricing_method);
 
 	// Get input file paths

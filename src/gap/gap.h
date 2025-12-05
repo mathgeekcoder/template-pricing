@@ -135,10 +135,10 @@ int solve_gap(const std::string& filename, quill::CsvWriter<CsvSchema, quill::Fr
     GapSolver<RmpSolver> m(filename, params, csv_writer);
 
     // Determine the Farkas pricer type based on the init method
-    if (init_method == "mip_template" || (init_method == "choose" && pricing_method == "mip_template")) {
+    if (init_method == "mip_template" || (init_method == "auto" && pricing_method == "mip_template")) {
         return solve_gap_with_method<RmpSolver, TemplateFarkas>(m, pricing_method);
     }
-    else if (init_method == "lagrange_template" || (init_method == "choose" && pricing_method == "lagrange_template")) {
+    else if (init_method == "lagrange_template" || (init_method == "auto" && pricing_method == "lagrange_template")) {
         return solve_gap_with_method<RmpSolver, LagrangeTemplateFarkas>(m, pricing_method);
     }
     else if (init_method == "dantzig") {
