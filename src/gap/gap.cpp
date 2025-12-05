@@ -10,44 +10,44 @@
 #include <filesystem>
 #include "utils.h"
 
+// Helper to apply RmpSolver template parameter to a list of pricer templates
+template <typename RmpSolver, template<typename> class... Pricers>
+using RmpTuple = std::tuple<Pricers<RmpSolver>...>;
+
 // Pricer types
 template <typename RmpSolver>
-struct PricerTypes {
-    using types = std::tuple<
-        DantzigPrice<RmpSolver>,
-        WentgesPrice<RmpSolver>,
-        TemplatePrice<RmpSolver>,
-        LagrangeTemplatePrice<RmpSolver>
-    >;
-};
+using PricerTypes = RmpTuple<RmpSolver, 
+    DantzigPrice, 
+    WentgesPrice, 
+    TemplatePrice, 
+    LagrangeTemplatePrice
+>;
 
 // Farkas types
 template <typename RmpSolver>
-struct FarkasPricerTypes {
-    using types = std::tuple<
-        DantzigFarkas<RmpSolver>,
-        TemplateFarkas<RmpSolver>,
-        LagrangeTemplateFarkas<RmpSolver>
-    >;
-};
+using FarkasPricerTypes = RmpTuple<RmpSolver, 
+    DantzigFarkas, 
+    TemplateFarkas, 
+    LagrangeTemplateFarkas
+>;
 
 // Helper to instantiate all combinations of GapSolver<RmpSolver>::solve<Pricer, FarkasPricer> function
 template <typename RmpSolver, typename Pricer, typename... FarkasPricers>
-void instantiate_solve_combinations(std::tuple<FarkasPricers...>*) {
+void init_solve_combinations(std::tuple<FarkasPricers...>*) {
     ((void)static_cast<int (GapSolver<RmpSolver>::*)(Pricer&, FarkasPricers&)>(
         &GapSolver<RmpSolver>::template solve<Pricer, FarkasPricers>), ...);
 }
 
 template <typename RmpSolver, typename... Pricers>
-void instantiate_all_pricers(std::tuple<Pricers...>*) {
-    (instantiate_solve_combinations<RmpSolver, Pricers>(
-        static_cast<typename FarkasPricerTypes<RmpSolver>::types*>(nullptr)), ...);
+void init_all_pricers(std::tuple<Pricers...>*) {
+    (init_solve_combinations<RmpSolver, Pricers>(
+        static_cast<FarkasPricerTypes<RmpSolver>*>(nullptr)), ...);
 }
 
-template void instantiate_all_pricers<Highs>(PricerTypes<Highs>::types*);
+template void init_all_pricers<Highs>(PricerTypes<Highs>*);
 
 #ifdef SUPPORT_GUROBI
-template void instantiate_all_pricers<GurobiHighs>(PricerTypes<GurobiHighs>::types*);
+template void init_all_pricers<GurobiHighs>(PricerTypes<GurobiHighs>*);
 #endif
 
 template <typename RmpSolver>
