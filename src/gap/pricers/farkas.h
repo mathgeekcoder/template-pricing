@@ -58,7 +58,13 @@ struct LagrangeTemplateFarkas {
         tf::Taskflow taskflow;
 
         taskflow.for_each_index(0, _instance->machines, 1, [&](int m) {
-            reduced_costs[m] = _template.optimize_lagrangian(_template._template[m], duals, duals[_instance->jobs + m], pricing[m], _template._mu[m]);
+            reduced_costs[m] = pricing[m].optimize(duals, duals[_instance->jobs + m]);
+
+			// if reduce cost is non-positive, lagrangian will require hi_mu to be infinite
+            if (reduced_costs[m] > 1e-6) {
+                reduced_costs[m] = _template.optimize_lagrangian(_template._template[m], duals, duals[_instance->jobs + m], pricing[m], _template._mu[m]);
+            }
+
             pricing[m].solution.push_back(_instance->jobs + m);
         });
 

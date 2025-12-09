@@ -68,7 +68,7 @@ double LagrangeTemplatePrice<RmpSolver>::optimize_lagrangian(const std::vector<d
     _counts[machine] = 0;
 
     // find first feasible hi_mu
-    while (true) {
+    while (hi_mu < kHighsInf) {
         for (int j = 0; j < _instance->jobs; ++j) {
             tmpProfit[j] = template_obj[j] + hi_mu * obj[j];
         }
@@ -87,6 +87,12 @@ double LagrangeTemplatePrice<RmpSolver>::optimize_lagrangian(const std::vector<d
         lo_mu = hi_mu;
         hi_mu *= 2;
 		_counts[machine]++;
+    }
+
+	// shouldn't occur since calling functions perform checks, but just in case
+    if (hi_mu == kHighsInf) {
+        hi_mu = 0.5;
+        return -kHighsInf;
     }
 
     best_solution.swap(pricer.solution);
