@@ -16,6 +16,7 @@
 #include "extern/gurobi/gurobi_highs.h"
 #include <filesystem>
 #include <regex>
+#include "zlib.h"
 
 namespace fs = std::filesystem;
 
@@ -345,143 +346,6 @@ struct std_counter
     const size_t size() const { return count; }
 };
 
-
-// splits a csv string into it's components, assumes known size
-static std::string_view csv_trim(const char*& first, const char*& last)
-{
-    // trim whitespace from start
-    while (first < last && std::isspace(*first))
-        ++first;
-
-    if (*first == '\"')
-        ++first;
-
-    // trim whitespace from end
-    auto tmp = last - 1;
-
-    while (tmp > first && std::isspace(*tmp))
-        --tmp;
-
-    if (*tmp == '\"')
-        --tmp;
-
-    // can be "empty" string
-    return std::string_view(first, tmp - first + 1);
-}
-
-
-static inline std::string_view csv_split_single(const std::string_view str)
-{
-    auto first = str.data(), last = str.data() + str.size();
-    return csv_trim(first, last);
-}
-
-template <int size, char token = ','>
-std::array<std::string_view, size> csv_split(const std::string_view str)
-{
-    std::array<std::string_view, size> output;
-    bool in_quotes = false;
-    int count = 0;
-
-    for (auto first = str.data(), second = str.data(), last = str.data() + str.size(); second != last && first != last; first = second + 1) {
-        // find next token outside quotes
-        for (second = first; second < last; ++second) {
-            if (*second == '\"') {
-                in_quotes = !in_quotes;
-            }
-            else if (in_quotes == false && *second == token)
-                break;
-        }
-
-        output[count++] = csv_trim(first, second);
-    }
-
-    return output;
-}
-
-static std::vector<std::string_view> csv_split(const std::string_view str)
-{
-    std::vector<std::string_view> output;
-    bool in_quotes = false;
-
-    for (auto first = str.data(), second = str.data(), last = str.data() + str.size(); second != last && first != last; first = second + 1) {
-        // find next , outside quotes
-        for (second = first; second < last; ++second) {
-            if (*second == '\"') {
-                in_quotes = !in_quotes;
-            }
-            else if (in_quotes == false && *second == ',')
-                break;
-        }
-
-        output.emplace_back(csv_trim(first, second));
-    }
-
-    return output;
-}
-
-static void read_csv_file(std::string& filename, bool skipHeader, std::function<void(const std::string&)> processLine) {
-    std::ifstream file(filename);
-
-    if (file.is_open() == false)
-        throw std::runtime_error("File not found");
-
-    const int CHUNK = 8192;
-    char out[CHUNK];
-    std::string output;
-
-    bool in_quotes = false;
-
-    while (file.eof() == false) {
-        file.read(out, CHUNK);
-        std::streamsize have = file.gcount();
-
-        char* line = (char*)out;
-        bool skipHeader = true;
-
-        while (have > 0) {
-            // find end of line
-            int length = 0;
-
-            // support newlines in quotes
-            while (length < have) {
-                if (line[length] == '\"')
-                    in_quotes = !in_quotes;
-                else if (in_quotes == false && line[length] == '\n')
-                    break;
-
-                ++length;
-            }
-
-            output.insert(output.end(), line, line + length);
-
-            if (length < have) {
-                if (output.empty() == false) {
-                    if (skipHeader) {
-						skipHeader = false;
-					}
-                    else {
-						processLine(output);
-					}
-				}
-
-                output.clear();
-
-                ++length;
-                have -= length;
-                line += length;
-            }
-            else {
-                have = 0;
-            }
-        }
-    }
-
-    // last line of file didn't have a newline
-    if (output.empty() == false)
-        processLine(output);
-}
-
 template <typename Container, typename T, typename Lookup>
 T sum(const Container& container, T init, Lookup& op) {
     return std::accumulate(container.begin(), container.end(), init, [&](T acc, const auto& elem) {
@@ -557,4 +421,72 @@ static std::vector<std::filesystem::path> get_input_files(std::string& input) {
 
     std::sort(filePaths.begin(), filePaths.end());
     return filePaths;
+}
+
+#define ENABLE_ZLIB_GZIP 32
+
+static std::string read_file(const std::string& filename) {
+    std::ifstream file_in(filename, std::ios_base::in);
+    if (!file_in.is_open()) {
+        throw std::runtime_error("Could not open file: " + filename);
+    }
+    std::ostringstream ss;
+    ss << file_in.rdbuf();
+    file_in.close();
+    return ss.str();
+}
+
+// quick and dirty function to read gz file into string
+static std::string read_gz_file(const std::string& filename) {
+    std::string output;
+
+    z_stream strm;
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+
+	// read entire file into vector
+    std::ifstream file_in(filename, std::ios_base::in |  std::ios_base::binary);
+    if (!file_in.is_open()) {
+        throw std::runtime_error("Could not open file: " + filename);
+    }
+
+    size_t file_size;
+    std::vector<unsigned char> buffer;
+
+    file_in.seekg(0, std::ios::end);
+    file_size = file_in.tellg();
+    file_in.seekg(0, std::ios::beg);
+    buffer.resize(file_size);
+    file_in.read(reinterpret_cast<char*>(buffer.data()), file_size);
+    file_in.close();
+
+    strm.avail_in = file_size;
+    strm.next_in = buffer.data();
+
+    if (inflateInit2(&strm, MAX_WBITS | ENABLE_ZLIB_GZIP) != Z_OK) {
+        return output;
+    }
+
+    const int CHUNK = 1024;
+    unsigned char out[CHUNK];
+
+    // inflate
+    do {
+        strm.avail_out = CHUNK;
+        strm.next_out = out;
+
+        int ret = inflate(&strm, Z_NO_FLUSH);
+
+        if (ret != Z_OK && ret != Z_STREAM_END) {
+            inflateEnd(&strm);
+            return output;
+        }
+
+        unsigned have = CHUNK - strm.avail_out;
+        output.insert(output.end(), out, out + have);
+    } while (strm.avail_out == 0);
+
+    inflateEnd(&strm);
+    return output;
 }

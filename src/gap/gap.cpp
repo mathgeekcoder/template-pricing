@@ -31,24 +31,41 @@ using FarkasPricerTypes = RmpTuple<RmpSolver,
     LagrangeTemplateFarkas
 >;
 
-// Helper to instantiate all combinations of GapSolver<RmpSolver>::solve<Pricer, FarkasPricer> function
-template <typename RmpSolver, typename Pricer, typename... FarkasPricers>
-void init_solve_combinations(std::tuple<FarkasPricers...>*) {
-    ((void)static_cast<int (GapSolver<RmpSolver>::*)(Pricer&, FarkasPricers&)>(
-        &GapSolver<RmpSolver>::template solve<Pricer, FarkasPricers>), ...);
-}
 
-template <typename RmpSolver, typename... Pricers>
-void init_all_pricers(std::tuple<Pricers...>*) {
-    (init_solve_combinations<RmpSolver, Pricers>(
-        static_cast<FarkasPricerTypes<RmpSolver>*>(nullptr)), ...);
-}
+template GapSolver<Highs, DantzigFarkas, DantzigPrice>;
+template GapSolver<Highs, DantzigFarkas, WentgesPrice>;
+template GapSolver<Highs, DantzigFarkas, TemplatePrice>;
+template GapSolver<Highs, DantzigFarkas, LagrangeTemplatePrice>;
 
-template void init_all_pricers<Highs>(PricerTypes<Highs>*);
+template GapSolver<Highs, TemplateFarkas, DantzigPrice>;
+template GapSolver<Highs, TemplateFarkas, WentgesPrice>;
+template GapSolver<Highs, TemplateFarkas, TemplatePrice>;
+template GapSolver<Highs, TemplateFarkas, LagrangeTemplatePrice>;
+
+template GapSolver<Highs, LagrangeTemplateFarkas, DantzigPrice>;
+template GapSolver<Highs, LagrangeTemplateFarkas, WentgesPrice>;
+template GapSolver<Highs, LagrangeTemplateFarkas, TemplatePrice>;
+template GapSolver<Highs, LagrangeTemplateFarkas, LagrangeTemplatePrice>;
 
 #ifdef SUPPORT_GUROBI
-template void init_all_pricers<GurobiHighs>(PricerTypes<GurobiHighs>*);
+
+template GapSolver<GurobiHighs, DantzigFarkas, DantzigPrice>;
+template GapSolver<GurobiHighs, DantzigFarkas, WentgesPrice>;
+template GapSolver<GurobiHighs, DantzigFarkas, TemplatePrice>;
+template GapSolver<GurobiHighs, DantzigFarkas, LagrangeTemplatePrice>;
+
+template GapSolver<GurobiHighs, TemplateFarkas, DantzigPrice>;
+template GapSolver<GurobiHighs, TemplateFarkas, WentgesPrice>;
+template GapSolver<GurobiHighs, TemplateFarkas, TemplatePrice>;
+template GapSolver<GurobiHighs, TemplateFarkas, LagrangeTemplatePrice>;
+
+template GapSolver<GurobiHighs, LagrangeTemplateFarkas, DantzigPrice>;
+template GapSolver<GurobiHighs, LagrangeTemplateFarkas, WentgesPrice>;
+template GapSolver<GurobiHighs, LagrangeTemplateFarkas, TemplatePrice>;
+template GapSolver<GurobiHighs, LagrangeTemplateFarkas, LagrangeTemplatePrice>;
+
 #endif
+
 
 template <typename RmpSolver>
 void AgeColumnManagement<RmpSolver>::reduce(uint32_t iteration_count) {
@@ -93,8 +110,8 @@ void AgeColumnManagement<RmpSolver>::reduce(uint32_t iteration_count) {
     }
 }
 
-template <typename RmpSolver>
-void GapSolver<RmpSolver>::presolve() {
+template <typename RmpSolver, template<typename> class FarkasType, template<typename> class PricerType>
+void GapSolver<RmpSolver, FarkasType, PricerType>::presolve() {
     // solve LP for template pricing
     _LB = lp.solve();
     lp_iteration_count = lp.iterations;
@@ -112,9 +129,11 @@ void GapSolver<RmpSolver>::presolve() {
     }
 }
 
-template <typename RmpSolver>
-template <typename PricerType, typename FarkasPricerType>
-int GapSolver<RmpSolver>::solve(PricerType& pricer, FarkasPricerType& pricer_farkas) {
+template <typename RmpSolver, template<typename> class FarkasType, template<typename> class PricerType>
+int GapSolver<RmpSolver, FarkasType, PricerType>::solve() {
+    PricerType<RmpSolver> pricer;
+    FarkasType<RmpSolver> pricer_farkas;
+
     highs::parallel::initialize_scheduler(1);
     total_time.start();
     tbl.write_header();
@@ -268,9 +287,8 @@ cg_time.pause();
     return 0;
 }
 
-template <typename RmpSolver>
-template <typename FarkasPricerType>
-bool GapSolver<RmpSolver>::restoreFeasibility(FarkasPricerType &pricer_farkas) {
+template <typename RmpSolver, template<typename> class FarkasType, template<typename> class PricerType>
+bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType<RmpSolver> &pricer_farkas) {
     bool has_dual_ray = false;
     std::vector<double> dual_ray(rmp->getNumRow(), 1);
 
@@ -329,8 +347,8 @@ cg_time.pause();
     return true;
 }
 
-template <typename RmpSolver>
-void GapSolver<RmpSolver>::updateCompactSolution() {
+template <typename RmpSolver, template<typename> class FarkasType, template<typename> class PricerType>
+void GapSolver<RmpSolver, FarkasType, PricerType>::updateCompactSolution() {
     const auto& solution = rmp->getSolution();
 
     if (solution.value_valid) {
@@ -386,8 +404,8 @@ void GapSolver<RmpSolver>::updateCompactSolution() {
 
 // we might have duplicate jobs since RMP uses cover (instead of partition)
 // if we have an integral solution we need to remove duplicates to get the correct UB
-template <typename RmpSolver>
-double GapSolver<RmpSolver>::remove_duplicates() {
+template <typename RmpSolver, template<typename> class FarkasType, template<typename> class PricerType>
+double GapSolver<RmpSolver, FarkasType, PricerType>::remove_duplicates() {
     const auto& solution = rmp->getSolution();
     const HighsInt* basis = rmp->getBasicVariablesArray();
     const HighsInt num_col = rmp->getNumCol();
@@ -485,8 +503,8 @@ double GapSolver<RmpSolver>::remove_duplicates() {
     }
 }
 
-template <typename RmpSolver>
-int GapSolver<RmpSolver>::add_columns(std::vector<double>& reduced_costs) {
+template <typename RmpSolver, template<typename> class FarkasType, template<typename> class PricerType>
+int GapSolver<RmpSolver, FarkasType, PricerType>::add_columns(std::vector<double>& reduced_costs) {
     int count = 0;
 
     for (int m = 0; m < instance.machines; ++m) {

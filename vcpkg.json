@@ -5,6 +5,8 @@
     "highs",
     "quill",
     "argparse",
-    "taskflow"
+    "taskflow",
+    "nlohmann-json",
+    "zlib"
   ]
 }

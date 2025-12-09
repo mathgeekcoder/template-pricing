@@ -34,7 +34,9 @@ struct AgeColumnManagement {
 };
 
 
-template <typename RmpSolver>
+template <typename RmpSolver, 
+          template<typename> class FarkasType, 
+          template<typename> class PricerType>
 struct GapSolver {
     static constexpr int ITERATION_OUTPUT = 5;
     static constexpr double ITERATION_TIME = 1;
@@ -86,66 +88,69 @@ struct GapSolver {
     }
 
     void presolve();
+    int solve();
 
-    template <typename PricerType, typename FarkasPricerType> 
-    int solve(PricerType& pricer, FarkasPricerType& pricer_farkas);
-
-    template <typename PricerType, typename FarkasPricerType>
-    int solve() {
-        PricerType pricer;
-        FarkasPricerType pricer_farkas;
-		return solve(pricer, pricer_farkas);
-    }
-
-    template <typename FarkasPricerType>
-    bool restoreFeasibility(FarkasPricerType &pricer_farkas);
+    bool restoreFeasibility(FarkasType<RmpSolver> &pricer_farkas);
 	void updateCompactSolution();
 
     int add_columns(std::vector<double>& reduced_costs);
     double remove_duplicates();
 };
 
-template <typename RmpSolver, template<typename> class PricerType, template<typename> class FarkasPricerType>
-int solve_gap_with_farkas(GapSolver<RmpSolver>& m) {
-    return m.template solve<PricerType<RmpSolver>, FarkasPricerType<RmpSolver>>();
+template <typename RmpSolver, template<typename> class PricerType, template<typename> class FarkasType>
+int solve_gap_impl(const std::string& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer, Parameters& params) {
+    GapSolver<RmpSolver, FarkasType, PricerType> m(filename, params, csv_writer);
+    return m.solve();
 }
 
 template <typename RmpSolver, template<typename> class FarkasPricerType>
-int solve_gap_with_method(GapSolver<RmpSolver>& m, const std::string& pricing_method) {
-    if (pricing_method == "mip_template") {
-        return solve_gap_with_farkas<RmpSolver, TemplatePrice, FarkasPricerType>(m);
+int solve_gap_farkas(const std::string& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer, Parameters& params) {
+    if (params.pricing_method == "mip_template") {
+        return solve_gap_impl<RmpSolver, TemplatePrice, FarkasPricerType>(filename, csv_writer, params);
     }
-    else if (pricing_method == "lagrange_template") {
-        return solve_gap_with_farkas<RmpSolver, LagrangeTemplatePrice, FarkasPricerType>(m);
+    else if (params.pricing_method == "lagrange_template") {
+        return solve_gap_impl<RmpSolver, LagrangeTemplatePrice, FarkasPricerType>(filename, csv_writer, params);
     }
-    else if (pricing_method == "wentges") {
-        return solve_gap_with_farkas<RmpSolver, WentgesPrice, FarkasPricerType>(m);
+    else if (params.pricing_method == "wentges") {
+        return solve_gap_impl<RmpSolver, WentgesPrice, FarkasPricerType>(filename, csv_writer, params);
     }
-    else if (pricing_method == "dantzig") {
-        return solve_gap_with_farkas<RmpSolver, DantzigPrice, FarkasPricerType>(m);
+    else if (params.pricing_method == "dantzig") {
+        return solve_gap_impl<RmpSolver, DantzigPrice, FarkasPricerType>(filename, csv_writer, params);
     }
     else {
-        std::cerr << "Unsupported pricing method: " << pricing_method << std::endl;
+        std::cerr << "Unsupported pricing method: " << params.pricing_method << std::endl;
         return 0;
     }
 }
 
 template <typename RmpSolver>
-int solve_gap(const std::string& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer, Parameters& params) {
-    GapSolver<RmpSolver> m(filename, params, csv_writer);
-
+int solve_gap_solver(const std::string& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer, Parameters& params) {
     // Determine the Farkas pricer type based on the init method
     if (params.init_method == "mip_template" || (params.init_method == "auto" && params.pricing_method == "mip_template")) {
-        return solve_gap_with_method<RmpSolver, TemplateFarkas>(m, params.pricing_method);
+        return solve_gap_farkas<RmpSolver, TemplateFarkas>(filename, csv_writer, params);
     }
     else if (params.init_method == "lagrange_template" || (params.init_method == "auto" && params.pricing_method == "lagrange_template")) {
-        return solve_gap_with_method<RmpSolver, LagrangeTemplateFarkas>(m, params.pricing_method);
+        return solve_gap_farkas<RmpSolver, LagrangeTemplateFarkas>(filename, csv_writer, params);
     }
-    else if (params.init_method == "dantzig") {
-        return solve_gap_with_method<RmpSolver, DantzigFarkas>(m, params.pricing_method);
+    else if (params.init_method == "dantzig" || params.init_method == "auto") {
+        return solve_gap_farkas<RmpSolver, DantzigFarkas>(filename, csv_writer, params);
     }
     else {
         std::cerr << "Unsupported init method: " << params.init_method << std::endl;
         return 0;
+    }
+}
+
+static int solve_gap(const std::string& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer, Parameters& params) {
+    if (params.solver[0] == 'g') {
+#ifdef SUPPORT_GUROBI
+        return solve_gap_solver<GurobiHighs>(filename, csv_writer, params);
+#else
+        std::cerr << "Gurobi not supported." << std::endl;
+        return 0;
+#endif
+    }
+    else {
+        return solve_gap_solver<Highs>(filename, csv_writer, params);
     }
 }

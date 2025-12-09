@@ -40,14 +40,7 @@ int solve_gap_instance(const fs::path& filename, std::string& log_filename, Para
               << "Pricer: " << params.pricing_method << std::endl
               << "Inst  : " << filename.filename().string() << std::endl << std::endl;
 
-    if (params.solver[0] == 'g') {
-#ifdef SUPPORT_GUROBI
-        result = solve_gap<GurobiHighs>(filename.string(), csv_writer, params);
-#endif
-    }
-    else {
-        result = solve_gap<Highs>(filename.string(), csv_writer, params);
-    }
+    result = solve_gap(filename.string(), csv_writer, params);
 
     std::cout << std::endl;
 	return result;
@@ -212,13 +205,23 @@ int main(int argc, char* argv[]) {
                     return;
                 }
 
-                try {
-                    int result = 0;
+                // GAP instances
+				std::vector<std::string> supported_extensions = { ".gz", ".json", "" };
 
-                    // if failure: repeat replication (e.g., basis bug in HiGHS)
-                    for (int retries = 20; retries >= 0; --retries) {
-                        // GAP instances
-                        if (filename.extension() == "") {
+                try {
+					bool supported = std::any_of(supported_extensions.begin(), supported_extensions.end(),
+                        [&](const std::string& ext) {
+                            if (filename.extension() == ext) {
+                                return true;
+                            }
+                            return false;
+						});
+
+                    if (supported) {
+                        int result = 0;
+
+                        // if failure: repeat replication (e.g., basis bug in HiGHS)
+                        for (int retries = 20; retries >= 0; --retries) {
                             Parameters params;
                             params.time_limit = program.get<int>("--time_limit");
                             params.random_seed = (seed == -1 ? (20 - retries) * 100 + (replication - 1) : seed);
@@ -232,21 +235,20 @@ int main(int argc, char* argv[]) {
                             GapInstance gap_instance(filename.string());
                             set_age_limit(params, gap_instance.machines, gap_instance.jobs);
 
-							result = solve_gap_instance(filename, log_filename, params);
-                        }
-                        else {
-                            std::cerr << "Unsupported file format: " << filename.extension() << std::endl;
-                            break;
+						    result = solve_gap_instance(filename, log_filename, params);
+
+                            if (result == 0) {
+                                break;
+                            }
                         }
 
-                        if (result == 0) {
-                            break;
+                        // delete output
+                        if (result != 0) {
+                            std::remove(log_filename.c_str());
                         }
                     }
-
-                    // delete output
-                    if (result != 0) {
-                        std::remove(log_filename.c_str());
+                    else {
+                        std::cerr << "Unsupported file format: " << filename.extension() << std::endl;
                     }
                 }
                 catch (const std::exception& e) {
