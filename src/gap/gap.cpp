@@ -32,37 +32,37 @@ using FarkasPricerTypes = RmpTuple<RmpSolver,
 >;
 
 
-template GapSolver<Highs, DantzigFarkas, DantzigPrice>;
-template GapSolver<Highs, DantzigFarkas, WentgesPrice>;
-template GapSolver<Highs, DantzigFarkas, TemplatePrice>;
-template GapSolver<Highs, DantzigFarkas, LagrangeTemplatePrice>;
+template class GapSolver<Highs, DantzigFarkas, DantzigPrice>;
+template class GapSolver<Highs, DantzigFarkas, WentgesPrice>;
+template class GapSolver<Highs, DantzigFarkas, TemplatePrice>;
+template class GapSolver<Highs, DantzigFarkas, LagrangeTemplatePrice>;
 
-template GapSolver<Highs, TemplateFarkas, DantzigPrice>;
-template GapSolver<Highs, TemplateFarkas, WentgesPrice>;
-template GapSolver<Highs, TemplateFarkas, TemplatePrice>;
-template GapSolver<Highs, TemplateFarkas, LagrangeTemplatePrice>;
+template class GapSolver<Highs, TemplateFarkas, DantzigPrice>;
+template class GapSolver<Highs, TemplateFarkas, WentgesPrice>;
+template class GapSolver<Highs, TemplateFarkas, TemplatePrice>;
+template class GapSolver<Highs, TemplateFarkas, LagrangeTemplatePrice>;
 
-template GapSolver<Highs, LagrangeTemplateFarkas, DantzigPrice>;
-template GapSolver<Highs, LagrangeTemplateFarkas, WentgesPrice>;
-template GapSolver<Highs, LagrangeTemplateFarkas, TemplatePrice>;
-template GapSolver<Highs, LagrangeTemplateFarkas, LagrangeTemplatePrice>;
+template class GapSolver<Highs, LagrangeTemplateFarkas, DantzigPrice>;
+template class GapSolver<Highs, LagrangeTemplateFarkas, WentgesPrice>;
+template class GapSolver<Highs, LagrangeTemplateFarkas, TemplatePrice>;
+template class GapSolver<Highs, LagrangeTemplateFarkas, LagrangeTemplatePrice>;
 
 #ifdef SUPPORT_GUROBI
 
-template GapSolver<GurobiHighs, DantzigFarkas, DantzigPrice>;
-template GapSolver<GurobiHighs, DantzigFarkas, WentgesPrice>;
-template GapSolver<GurobiHighs, DantzigFarkas, TemplatePrice>;
-template GapSolver<GurobiHighs, DantzigFarkas, LagrangeTemplatePrice>;
+template class GapSolver<GurobiHighs, DantzigFarkas, DantzigPrice>;
+template class GapSolver<GurobiHighs, DantzigFarkas, WentgesPrice>;
+template class GapSolver<GurobiHighs, DantzigFarkas, TemplatePrice>;
+template class GapSolver<GurobiHighs, DantzigFarkas, LagrangeTemplatePrice>;
 
-template GapSolver<GurobiHighs, TemplateFarkas, DantzigPrice>;
-template GapSolver<GurobiHighs, TemplateFarkas, WentgesPrice>;
-template GapSolver<GurobiHighs, TemplateFarkas, TemplatePrice>;
-template GapSolver<GurobiHighs, TemplateFarkas, LagrangeTemplatePrice>;
+template class GapSolver<GurobiHighs, TemplateFarkas, DantzigPrice>;
+template class GapSolver<GurobiHighs, TemplateFarkas, WentgesPrice>;
+template class GapSolver<GurobiHighs, TemplateFarkas, TemplatePrice>;
+template class GapSolver<GurobiHighs, TemplateFarkas, LagrangeTemplatePrice>;
 
-template GapSolver<GurobiHighs, LagrangeTemplateFarkas, DantzigPrice>;
-template GapSolver<GurobiHighs, LagrangeTemplateFarkas, WentgesPrice>;
-template GapSolver<GurobiHighs, LagrangeTemplateFarkas, TemplatePrice>;
-template GapSolver<GurobiHighs, LagrangeTemplateFarkas, LagrangeTemplatePrice>;
+template class GapSolver<GurobiHighs, LagrangeTemplateFarkas, DantzigPrice>;
+template class GapSolver<GurobiHighs, LagrangeTemplateFarkas, WentgesPrice>;
+template class GapSolver<GurobiHighs, LagrangeTemplateFarkas, TemplatePrice>;
+template class GapSolver<GurobiHighs, LagrangeTemplateFarkas, LagrangeTemplatePrice>;
 
 #endif
 
