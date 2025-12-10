@@ -307,6 +307,7 @@ cg_time.pause();
     do {
 rmp_time.start();
         auto status = rmp->run();
+		auto modelStatus = rmp->getModelStatus();
 
         // HiGHs has gotten into a bad state, so we need to reset?
         if (status == HighsStatus::kError) {
@@ -317,8 +318,10 @@ rmp_time.start();
         rmp->getDualRay(has_dual_ray, dual_ray.data());
         lp_iteration_count += rmp->getInfo().simplex_iteration_count;
 
-        if (rmp->getModelStatus() == HighsModelStatus::kUnknown && has_dual_ray == false) {
-            std::cout << std::format("{}: Test Error - {}\n", instance.name, (int)rmp->getModelStatus());
+        if (modelStatus == HighsModelStatus::kUnknown && has_dual_ray == false) {
+			// there's an issue with dual simplex when tabooing pivots to prove infeasibility
+			// it returns unknown status with no dual ray
+            std::cout << std::format("{}: Error proving infeasibility and calculating dual ray - {}\n", instance.name, (int)modelStatus);
             return false;
         }
 rmp_time.pause();
