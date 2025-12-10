@@ -64,7 +64,7 @@ struct GapSolver {
     ColumnAlignOutput tbl;
     AgeColumnManagement<RmpSolver> column_management;
     PricingBlockVector<GapPricing> pricing;
-    GapCompact lp;
+    GapCompact<RmpSolver> lp;
 
     GapSolver(std::string filename, const Parameters& params, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer)
         : instance(filename), params(params), csv_writer(csv_writer), pricing(instance.machines), lp(instance), _executor(params.num_threads) {
@@ -126,7 +126,13 @@ int solve_gap_farkas(const std::string& filename, quill::CsvWriter<CsvSchema, qu
 template <typename RmpSolver>
 int solve_gap_solver(const std::string& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer, Parameters& params) {
     // Determine the Farkas pricer type based on the init method
-    if (params.init_method == "mip_template" || (params.init_method == "auto" && params.pricing_method == "mip_template")) {
+    if (params.pricing_method == "mip") {
+        GapInstance instance(filename);
+        GapCompact<RmpSolver> compact(instance);
+        compact.solve(true, true);
+        return 0;
+    }
+    else if (params.init_method == "mip_template" || (params.init_method == "auto" && params.pricing_method == "mip_template")) {
         return solve_gap_farkas<RmpSolver, TemplateFarkas>(filename, csv_writer, params);
     }
     else if (params.init_method == "lagrange_template" || (params.init_method == "auto" && params.pricing_method == "lagrange_template")) {

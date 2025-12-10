@@ -64,8 +64,8 @@ int main(int argc, char* argv[]) {
 
     program.add_argument("-m", "--method")
         .default_value(std::string("lagrange_template"))
-        .help("pricing method: {mip_template, lagrange_template, wentges, dantzig}")
-        .choices("mip_template", "lagrange_template", "wentges", "dantzig");
+        .help("pricing method: {mip_template, lagrange_template, wentges, dantzig, mip}")
+        .choices("mip_template", "lagrange_template", "wentges", "dantzig", "mip");
 
     program.add_argument("-i", "--init")
         .default_value(std::string("auto"))

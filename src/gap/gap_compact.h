@@ -4,20 +4,23 @@
 #include "highs/Highs.h"
 #include <ctime>
 
+template <typename RmpSolver>
 struct GapCompact {
 	GapInstance& _instance;
 	HighsSolution _solution;
 	size_t iterations = 0;
-	std::unique_ptr<Highs> highs;
+	std::unique_ptr<RmpSolver> highs;
 
 public:	
 	GapCompact(GapInstance& instance) : _instance(instance) {
-		highs = std::make_unique<Highs>();
+		highs = std::make_unique<RmpSolver>();
 	}
 
-	double solve() {
-		highs->setOptionValue("output_flag", "false");
-		highs->passModel(create_model());
+	double solve(bool output = false, bool integer = false) {
+		highs->setOptionValue("output_flag", output);
+
+		HighsModel model = create_model(integer);
+		highs->passModel(model);
 		highs->run();
 
 		_solution = highs->getSolution();
@@ -26,7 +29,7 @@ public:
 	}
 
 private:	
-	HighsModel create_model() {
+	HighsModel create_model(bool integer) {
 		HighsModel model;
 		size_t M = _instance.machines;
 		size_t J = _instance.jobs;
@@ -42,6 +45,10 @@ private:
 		model.lp_.col_lower_.assign(M * J, 0);
 		model.lp_.col_upper_.assign(M * J, 1);
 		model.lp_.col_cost_.assign( M * J, 0);
+
+		if (integer) {
+			model.lp_.integrality_.assign(M * J, HighsVarType::kInteger);
+		}
 
 		for (int m = 0; m < M; m++) {
 			for (int j = 0; j < J; j++) {

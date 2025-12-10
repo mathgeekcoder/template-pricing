@@ -14,7 +14,7 @@ struct DantzigFarkas {
 	tf::Executor* _executor = nullptr;
 
     template <typename Pricer>
-    void init(tf::Executor* executor, Pricer& pricer, PricingBlockVector<GapPricing>& pricing, GapCompact& lp) {
+    void init(tf::Executor* executor, Pricer& pricer, PricingBlockVector<GapPricing>& pricing, GapCompact<RmpSolver>& lp) {
         _instance = pricer._instance;
         _executor = executor;
     }
@@ -41,7 +41,7 @@ struct LagrangeTemplateFarkas {
     LagrangeTemplatePrice<RmpSolver> _template;
 
     template <typename Pricer>
-    void init(tf::Executor* executor, Pricer& pricer, PricingBlockVector<GapPricing>& pricing, GapCompact& lp) {
+    void init(tf::Executor* executor, Pricer& pricer, PricingBlockVector<GapPricing>& pricing, GapCompact<RmpSolver>& lp) {
         _instance = pricer._instance;
         _template.init(executor, pricer._rmp, _instance);
         _executor = executor;
@@ -83,7 +83,7 @@ struct TemplateFarkas {
     std::unique_ptr<PricingBlockVector<GapPricingMIP<RmpSolver>>> _mip;
 
     template <typename Pricer>
-    void init(tf::Executor* executor, Pricer& pricer, PricingBlockVector<GapPricing>& pricing, GapCompact& lp) {
+    void init(tf::Executor* executor, Pricer& pricer, PricingBlockVector<GapPricing>& pricing, GapCompact<RmpSolver>& lp) {
         _instance = pricer._instance;
 		_executor = executor;
         _template.init(_instance->machines, _instance->jobs);
