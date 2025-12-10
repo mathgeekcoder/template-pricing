@@ -18,6 +18,7 @@ class GurobiHighs {
 
 	int _numvars = 0;
 	int _numcons = 0;
+	bool stop_requested = false;
 
 	std::vector<int> basic_vars;
 	HighsSolution solution;
@@ -61,6 +62,7 @@ public:
 	}
 
 	HighsStatus run() {
+		GRBsetcallbackfunc(_model, my_callback, this);
 		GRBoptimize(_model);
 
 		// get primal/dual solution
@@ -78,6 +80,21 @@ public:
 		}
 
 		return (status == GRB_OPTIMAL || status == GRB_INFEASIBLE) ? HighsStatus::kOk : HighsStatus::kError;
+	}
+
+	// Callback function for Gurobi
+	static int __stdcall my_callback(GRBmodel* model, void* cbdata, int where, void* usrdata) {
+		(void)cbdata; (void)where; // unused parameters
+
+		GurobiHighs* gh = static_cast<GurobiHighs*>(usrdata);
+		if (gh->stop_requested) {
+			GRBterminate(model);
+		}
+		return 0; // 0 means continue unless terminated
+	}
+
+	void requestStop() {
+		stop_requested = true;
 	}
 
 	HighsSolution& getSolution() { return solution; }

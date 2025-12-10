@@ -28,6 +28,15 @@ public:
 		return highs->getObjectiveValue();
 	}
 
+	void terminate() {
+		if constexpr (std::is_same<RmpSolver, Highs>::value) {
+			//highs->terminate();
+		}
+		else {
+			highs->requestStop();
+		}
+	}
+
 private:	
 	HighsModel create_model(bool integer) {
 		HighsModel model;

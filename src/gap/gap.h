@@ -129,6 +129,18 @@ int solve_gap_solver(const std::string& filename, quill::CsvWriter<CsvSchema, qu
     if (params.pricing_method == "mip") {
         GapInstance instance(filename);
         GapCompact<RmpSolver> compact(instance);
+        int stop_count = 5;
+
+        HandleCtrlC ctrl_c_handler([&]() {
+            if (stop_count <= 0) {
+                exit(-1);
+            }
+
+            std::cout << std::format("Ctrl-C pressed, stopping... Press {} times to force stop\n", stop_count);
+            compact.terminate();
+            --stop_count;
+        });
+
         compact.solve(true, true);
         return 0;
     }
