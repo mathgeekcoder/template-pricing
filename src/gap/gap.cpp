@@ -311,7 +311,7 @@ rmp_time.start();
 
         // HiGHs has gotten into a bad state, so we need to reset?
         if (status == HighsStatus::kError) {
-            std::cout << std::format("{}: Unrecoverable Error\n", instance.name);
+            std::cout << std::format("{}: Unrecoverable Error {} {}\n", instance.name, (int)status, (int)modelStatus);
             return false;
         }
 
