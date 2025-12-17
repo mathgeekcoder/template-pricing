@@ -49,6 +49,7 @@ struct GapSolver {
     double _UB = kHighsInf;
     double previous_logging_time = -1;
     Timer total_time, rmp_time, cg_time;
+    bool should_stop = false;
 
     tf::Executor _executor;
     std::unique_ptr<RmpSolver> rmp;
@@ -105,16 +106,16 @@ int solve_gap_impl(const std::string& filename, quill::CsvWriter<CsvSchema, quil
 
 template <typename RmpSolver, template<typename> class FarkasPricerType>
 int solve_gap_farkas(const std::string& filename, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer, Parameters& params) {
-    if (params.pricing_method == "mip_template") {
+    if (params.pricing_method == "mt") {
         return solve_gap_impl<RmpSolver, TemplatePrice, FarkasPricerType>(filename, csv_writer, params);
     }
-    else if (params.pricing_method == "lagrange_template") {
+    else if (params.pricing_method == "lt") {
         return solve_gap_impl<RmpSolver, LagrangeTemplatePrice, FarkasPricerType>(filename, csv_writer, params);
     }
-    else if (params.pricing_method == "wentges") {
+    else if (params.pricing_method == "w") {
         return solve_gap_impl<RmpSolver, WentgesPrice, FarkasPricerType>(filename, csv_writer, params);
     }
-    else if (params.pricing_method == "dantzig") {
+    else if (params.pricing_method == "d") {
         return solve_gap_impl<RmpSolver, DantzigPrice, FarkasPricerType>(filename, csv_writer, params);
     }
     else {
@@ -128,6 +129,7 @@ int solve_gap_solver(const std::string& filename, quill::CsvWriter<CsvSchema, qu
     // Determine the Farkas pricer type based on the init method
     if (params.pricing_method == "mip") {
         GapInstance instance(filename);
+		instance.save_original(std::format("{}.orig", instance.name));
         GapCompact<RmpSolver> compact(instance);
         int stop_count = 5;
 
@@ -144,13 +146,13 @@ int solve_gap_solver(const std::string& filename, quill::CsvWriter<CsvSchema, qu
         compact.solve(true, true);
         return 0;
     }
-    else if (params.init_method == "mip_template" || (params.init_method == "auto" && params.pricing_method == "mip_template")) {
+    else if (params.init_method == "mt" || (params.init_method == "auto" && params.pricing_method == "mt")) {
         return solve_gap_farkas<RmpSolver, TemplateFarkas>(filename, csv_writer, params);
     }
-    else if (params.init_method == "lagrange_template" || (params.init_method == "auto" && params.pricing_method == "lagrange_template")) {
+    else if (params.init_method == "lt" || (params.init_method == "auto" && params.pricing_method == "lt")) {
         return solve_gap_farkas<RmpSolver, LagrangeTemplateFarkas>(filename, csv_writer, params);
     }
-    else if (params.init_method == "dantzig" || params.init_method == "auto") {
+    else if (params.init_method == "d" || params.init_method == "auto") {
         return solve_gap_farkas<RmpSolver, DantzigFarkas>(filename, csv_writer, params);
     }
     else {
