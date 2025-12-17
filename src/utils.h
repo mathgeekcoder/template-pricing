@@ -295,10 +295,27 @@ static std::span<const HighsInt> get_column(const Highs& highs, size_t col) {
     return std::span<const HighsInt>(lp.a_matrix_.index_.cbegin() + lp.a_matrix_.start_[col], lp.a_matrix_.start_[col + 1] - lp.a_matrix_.start_[col]);
 }
 
+static bool getColsCost(const Highs& highs, size_t start, size_t end, double* costs) {
+    auto& lp = highs.getLp();
+    
+    if (start < end && end < lp.num_col_) {
+        // copy is defined on [start, end)
+        std::copy(lp.col_cost_.cbegin() + start, lp.col_cost_.cbegin() + end + 1, costs);
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
 #ifdef SUPPORT_GUROBI
 
-static std::vector<HighsInt> get_column(const GurobiHighs& highs, size_t col) {
-    return highs.get_col(col);
+static std::vector<HighsInt> get_column(const GurobiHighs& g, size_t col) {
+    return g.get_col(col);
+}
+
+static bool getColsCost(const GurobiHighs& g, size_t start, size_t end, double* costs) {
+    return g.getColsCost(start, end, costs);
 }
 
 #endif

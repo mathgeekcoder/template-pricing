@@ -77,6 +77,17 @@ public:
 			solution.row_dual.resize(_numcons);
 			GRBgetdblattrarray(_model, GRB_DBL_ATTR_PI, 0, _numcons, solution.row_dual.data());
 			solution.dual_valid = true;
+
+			// I don't think this works if the constraint is equality (i.e., no slack)
+			//// get row value from slack, i.e., value +- slack = rhs
+			solution.row_value.resize(_numcons);
+			GRBgetdblattrarray(_model, GRB_DBL_ATTR_SLACK, 0, _numcons, solution.row_value.data());
+
+			for (int i = 0; i < _numcons; ++i) {
+				double rhs = 0.0;
+				GRBgetdblattrelement(_model, GRB_DBL_ATTR_RHS, i, &rhs);
+				solution.row_value[i] = rhs - solution.row_value[i];
+			}
 		}
 
 		return (status == GRB_OPTIMAL || status == GRB_INFEASIBLE) ? HighsStatus::kOk : HighsStatus::kError;
@@ -106,6 +117,14 @@ public:
 		double val = 0.0;
 		GRBgetdblattrelement(_model, GRB_DBL_ATTR_OBJ, col, &val);
 		return val;
+	}
+
+	bool getColsCost(int from, int to, double* costs) const {
+		if (from > to || from >= _numvars) return false;
+		to = std::min(to, _numvars - 1);
+		GRBupdatemodel(_model);  // needed if new cols have been added, but haven't solved yet
+		GRBgetdblattrarray(_model, GRB_DBL_ATTR_OBJ, from, to - from + 1, costs);
+		return true;
 	}
 
 	double getObjectiveValue() {

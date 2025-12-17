@@ -19,6 +19,8 @@ struct DantzigFarkas {
         _executor = executor;
     }
 
+    void update(RmpSolver* rmp) { }
+
     double optimize(const std::vector<double>& duals, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs) {
 		tf::Taskflow taskflow;
 
@@ -50,6 +52,34 @@ struct LagrangeTemplateFarkas {
             for (int j = 0; j < _instance->jobs; ++j) {
                 double value = lp._solution.col_value[m * _instance->jobs + j];
                 _template._template._template_columns[m][j] = (value > 1 - 1e-6) - (value < 1e-6);
+            }
+        }
+    }
+
+    // Update the template but ignore the dummy variables
+    void update(RmpSolver* rmp) {
+        for (int block = 0; block < _instance->machines; ++block) {
+            std::fill(_template._template._template_columns[block].begin(), _template._template._template_columns[block].end(), 0.0);
+        }
+
+        // assumes lp colwise
+		const auto& solution = rmp->getSolution();
+
+        for (size_t i = _instance->jobs, end = solution.col_value.size(); i < end; ++i) {
+            if (solution.col_value[i] > 1e-6) {
+                const auto& col = get_column(*rmp, i);
+                auto end = std::prev(col.end());  // assume last element is the block index
+                auto& template_block = _template._template._template_columns[*end - _instance->jobs];
+
+                for (auto it = col.begin(); it != end; ++it) {
+                    template_block[*it] += solution.col_value[i] / solution.row_value[*it];
+                }
+            }
+        }
+
+        for (auto& b : _template._template._template_columns) {
+            for (auto& c : b) {
+                c = (c > 1 - 1e-6) - (c < 1e-6);
             }
         }
     }
@@ -96,6 +126,34 @@ struct TemplateFarkas {
             for (int j = 0; j < _instance->jobs; ++j) {
                 double value = solution.col_value[m * _instance->jobs + j];
                 _template._template_columns[m][j] = (value > 1 - 1e-6) - (value < 1e-6);
+            }
+        }
+    }
+
+    // Update the template but ignore the dummy variables
+    void update(RmpSolver* rmp) {
+        for (int block = 0; block < _instance->machines; ++block) {
+            std::fill(_template._template_columns[block].begin(), _template._template_columns[block].end(), 0.0);
+        }
+
+        // assumes lp colwise
+        const auto& solution = rmp->getSolution();
+
+        for (size_t i = _instance->jobs, end = solution.col_value.size(); i < end; ++i) {
+            if (solution.col_value[i] > 1e-6) {
+                const auto& col = get_column(*rmp, i);
+                auto end = std::prev(col.end());  // assume last element is the block index
+                auto& template_block = _template._template_columns[*end - _instance->jobs];
+
+                for (auto it = col.begin(); it != end; ++it) {
+                    template_block[*it] += solution.col_value[i] / solution.row_value[*it];
+                }
+            }
+        }
+
+        for (auto& b : _template._template_columns) {
+            for (auto& c : b) {
+                c = (c > 1 - 1e-6) - (c < 1e-6);
             }
         }
     }
