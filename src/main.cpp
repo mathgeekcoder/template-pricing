@@ -18,7 +18,7 @@
 namespace fs = std::filesystem;
 bool has_completed(const std::string& log_filename);
 bool parameter_sweep(argparse::ArgumentParser& program, std::vector<fs::path>& filePaths, tf::Taskflow& taskflow);
-std::function<void(Parameters&, int, int)> column_retention_func(const std::string method);
+std::function<void(Parameters&, int, int)> column_retention_func(const std::vector<double>& params);
 
 std::function<void(Parameters&, int, int)> quadratic_column_retention_func(double a, double b, double c) {
     return [a, b, c](Parameters& params, int machines, int jobs) {
@@ -27,6 +27,13 @@ std::function<void(Parameters&, int, int)> quadratic_column_retention_func(doubl
         params.age_limit = std::max(1, static_cast<int>(std::ceil((a * ratio + b) * ratio + c - 1e-6)));
     };
 }
+
+static const std::unordered_map<std::string, std::vector<double>> default_retention_params = {
+    {"w",  {0.0, 0.3, 1.0}},
+    {"d",  {0.081875, 0.0, 1.0}},
+    {"lt", {0.00044, 0.0405, 1.0}},
+    {"mt", {0.00044, 0.0405, 1.0}}
+};
 
 int solve_gap_instance(const fs::path& filename, std::string& log_filename, Parameters& params) {
     int result = 0;
@@ -63,78 +70,75 @@ int main(int argc, char* argv[]) {
         .help("use Gurobi solver");
 
     program.add_argument("-m", "--method")
-        .default_value(std::string("lagrange_template"))
-        .help("pricing method: {mip_template, lagrange_template, wentges, dantzig, mip}")
-        .choices("mip_template", "lagrange_template", "wentges", "dantzig", "mip");
+        .default_value(std::string("lt"))
+        .metavar("METHOD")
+        .help("pricer method: {mt, lt, w, d, mip}")
+        .choices("mt", "lt", "w", "d", "mip");
 
     program.add_argument("-i", "--init")
         .default_value(std::string("auto"))
-        .help("initialization pricing method: {mip_template, lagrange_template, dantzig, auto}")
-        .choices("mip_template", "lagrange_template", "dantzig", "auto");
+        .metavar("METHOD")
+        .help("farkas method: {mt, lt, d, auto}")
+        .choices("mt", "lt", "d", "auto");
 
     program.add_argument("-s", "--seed")
         .default_value(-1)
+        .metavar("N")
         .scan<'i', int>()
         .help("random seed (-1 for system time)");
 
     program.add_argument("-r", "--replications")
         .default_value(1)
+        .metavar("N")
         .scan<'i', int>()
         .help("number of replications");
 
     program.add_argument("-p", "--parallel")
         .default_value(1)
+        .metavar("N")
         .scan<'i', int>()
         .help("number of parallel instances");
 
     program.add_argument("-t", "--threads")
         .default_value(int(std::thread::hardware_concurrency()))
+        .metavar("N")
         .scan<'i', int>()
         .help("number of threads (per parallel instance)");
 
     program.add_argument("--time_limit")
-		.default_value(21600) // 6 hours
+        .default_value(21600)
+        .metavar("SECS")
         .scan<'i', int>()
         .help("time limit (seconds) for each instance");
 
-    // take as a parameter a math function "--func", e.g., 0.0711*x^2 - 0.6111*x + 1
-    // where x is the jobs/machines ratio
-    program.add_argument("--func")
-        .default_value(std::optional<std::string>())
-        .help("function for determining column retention parameters based on jobs/machines ratio");
-
 	// parameter sweep options
-	program.add_group("Parameter Sweep Options");
+	program.add_group("Retention Options");
 
-	 program.add_argument("--age_start")
+	 program.add_argument("--age_sweep")
+	 	.nargs(3)
+	 	.metavar("START END STEP")
 	 	.scan<'i', int>()
-	 	.help("starting age limit for column retention sweep");
+	 	.help("age limit sweep parameters");
 
-	 program.add_argument("--age_end")
-	 	.scan<'i', int>()
-	 	.help("ending age limit for column retention sweep");
+	 program.add_argument("--multiplier_sweep")
+         .nargs(3)
+         .metavar("START END STEP")
+         .scan<'g', double>()
+         .help("column multiplier sweep parameters");
 
-     program.add_argument("--age_step")
-         .scan<'i', int>()
-         .help("step size for age limit in column retention sweep");
-
-	 program.add_argument("--multiplier_start")
-	 	.scan<'g', double>()
-	 	.help("starting column multiplier for column retention sweep");
-
-	 program.add_argument("--multiplier_end")
-	 	.scan<'g', double>()
-	 	.help("ending column multiplier for column retention sweep");
-
-	 program.add_argument("--multiplier_step")
-	 	.scan<'g', double>()
-	 	.help("step size for column multiplier in column retention sweep");
+     // take as a parameter a math function "--func", e.g., 0.0711*x^2 - 0.6111*x + 1
+     // where x is the jobs/machines ratio
+     program.add_argument("--func")
+        .nargs(3)
+        .metavar("A B C")
+        .scan<'g', double>()
+        .help("quadratic function coefficients a, b, c for ax^2+bx+c (e.g., 0.07 -0.6 1)");
 
      try {
         program.parse_args(argc, argv);
     }
     catch (const std::exception& err) {
-        std::cerr << err.what() << std::endl;
+        std::cerr << err.what() << std::endl << std::endl;
         std::cerr << program;
         return 1;
     }
@@ -165,7 +169,8 @@ int main(int argc, char* argv[]) {
 	}
 
     // build lambda function for --func parameter (or "method" defaults)
-    auto set_age_limit = column_retention_func(program.is_used("--func") ? program.get<std::string>("--func") : pricing_method);
+    std::vector<double> retention_params = program.is_used("--func") ? program.get<std::vector<double>>("--func") : default_retention_params.at(pricing_method);
+    auto set_age_limit = column_retention_func(retention_params);
 
 	// Get input file paths
     std::vector<fs::path> filePaths = get_input_files(input);
@@ -272,11 +277,8 @@ int main(int argc, char* argv[]) {
 
 bool parameter_sweep(argparse::ArgumentParser& program, std::vector<fs::path>& filePaths, tf::Taskflow& taskflow)
 {
-    bool any = (program.is_used("--age_start") || program.is_used("--age_end") || program.is_used("--age_step") ||
-        program.is_used("--multiplier_start") || program.is_used("--multiplier_end") || program.is_used("--multiplier_step"));
-
-    bool all = (program.is_used("--age_start") && program.is_used("--age_end") && program.is_used("--age_step") &&
-        program.is_used("--multiplier_start") && program.is_used("--multiplier_end") && program.is_used("--multiplier_step"));
+    bool any = (program.is_used("--age_sweep") || program.is_used("--multiplier_sweep"));
+    bool all = (program.is_used("--age_sweep") && program.is_used("--multiplier_sweep"));
 
     if (any) {
         if (!all) {
@@ -284,13 +286,15 @@ bool parameter_sweep(argparse::ArgumentParser& program, std::vector<fs::path>& f
             exit(-1);
 		}
         
-        int age_start = program.get<int>("--age_start");
-        int age_end = program.get<int>("--age_end");
-        int age_step = program.get<int>("--age_step");
+        auto age_params = program.get<std::vector<int>>("--age_sweep");
+        int age_start = age_params[0];
+        int age_end = age_params[1];
+        int age_step = age_params[2];
 
-        double multiplier_start = program.get<double>("--multiplier_start");
-        double multiplier_end = program.get<double>("--multiplier_end");
-        double multiplier_step = program.get<double>("--multiplier_step");
+        auto multiplier_params = program.get<std::vector<double>>("--multiplier_sweep");
+        double multiplier_start = multiplier_params[0];
+        double multiplier_end = multiplier_params[1];
+        double multiplier_step = multiplier_params[2];
 
         if (age_start < 1 || age_end < age_start || age_step < 1) {
             std::cerr << "Invalid age limit sweep parameters." << std::endl;
@@ -339,29 +343,14 @@ bool parameter_sweep(argparse::ArgumentParser& program, std::vector<fs::path>& f
     }
 }
 
-std::function<void(Parameters&, int, int)> column_retention_func(const std::string method) {
-    if (method == "wentges") {
-        return quadratic_column_retention_func(0, 0.3, 1);
-    }
-    else if (method == "dantzig") {
-        return quadratic_column_retention_func(0.081875, 0, 1);
-    }
-    else if (method == "lagrange_template" || method == "mip_template") {
-        return quadratic_column_retention_func(0.00044, 0.0405, 1);
+
+std::function<void(Parameters&, int, int)> column_retention_func(const std::vector<double>& params) {
+    if (params.size() == 3) {
+        return quadratic_column_retention_func(params[0], params[1], params[2]);
     }
     else {
-        // very simple parser for quadratic functions of the form ax^2 + bx + c
-        double a = 0.0, b = 0.0, c = 0.0;
-        std::regex regex(R"(([+-]?\d*\.?\d*)\*?x\^2\s*([+-]\s*\d*\.?\d*)\*?x\s*([+-]\s*\d*\.?\d*))");
-        std::smatch match;
-        if (std::regex_search(method, match, regex)) {
-            a = std::stod(replaceAll(match[1].str(), " ", ""));
-            b = std::stod(replaceAll(match[2].str(), " ", ""));
-            c = std::stod(replaceAll(match[3].str(), " ", ""));
-        }
-
-        return quadratic_column_retention_func(a, b, c);
-    }
+        throw std::invalid_argument("Invalid number of parameters for column retention function.");
+	}
 }
 
 // check if log file indicates completed run (ends with ",1")
