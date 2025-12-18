@@ -32,7 +32,8 @@ static const std::unordered_map<std::string, std::vector<double>> default_retent
     {"w",  {0.0, 0.3, 1.0}},
     {"d",  {0.081875, 0.0, 1.0}},
     {"lt", {0.00044, 0.0405, 1.0}},
-    {"mt", {0.00044, 0.0405, 1.0}}
+    {"mt", {0.00044, 0.0405, 1.0}},
+    {"mip", {0, 0, 0}}
 };
 
 int solve_gap_instance(const fs::path& filename, std::string& log_filename, Parameters& params) {
