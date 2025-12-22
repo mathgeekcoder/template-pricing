@@ -462,7 +462,7 @@ void GapSolver<RmpSolver, FarkasType, PricerType>::updateCompactSolution() {
         basis_size = 0;
         std::fill(_compact_solution.begin(), _compact_solution.end(), 0);
 
-        // try to find UB solution
+        // check for UB solution
         for (size_t idx = 0, size = rmp->getNumCol(); idx < size; ++idx) {
             if (solution.col_value[idx] > 1e-6) {
                 ++basis_size;

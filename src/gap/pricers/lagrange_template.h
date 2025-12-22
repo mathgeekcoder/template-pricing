@@ -8,7 +8,7 @@ struct LagrangeTemplatePrice {
     RmpSolver* _rmp = nullptr;
     GapInstance* _instance = nullptr;
     TemplatePricing _template;
-	tf::Executor* _executor;
+	tf::Executor* _executor = nullptr;
     std::vector<double> _mu;
     std::vector<int> _counts;
 

@@ -33,7 +33,8 @@ static const std::unordered_map<std::string, std::vector<double>> default_retent
     {"d",  {0.081875, 0.0, 1.0}},
     {"lt", {0.00044, 0.0405, 1.0}},
     {"mt", {0.00044, 0.0405, 1.0}},
-    {"mip", {0, 0, 0}}
+    {"mip", {0, 0, 0}},
+	{"lr", {0, 0, 0}}
 };
 
 int solve_gap_instance(const fs::path& filename, std::string& log_filename, Parameters& params) {
@@ -73,8 +74,8 @@ int main(int argc, char* argv[]) {
     program.add_argument("-m", "--method")
         .default_value(std::string("lt"))
         .metavar("METHOD")
-        .help("pricer method: {mt, lt, w, d, mip}")
-        .choices("mt", "lt", "w", "d", "mip");
+        .help("pricer method: {mt, lt, w, d, mip, lr}")
+        .choices("mt", "lt", "w", "d", "mip", "lr");
 
     program.add_argument("-i", "--init")
         .default_value(std::string("auto"))

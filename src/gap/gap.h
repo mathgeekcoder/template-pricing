@@ -15,6 +15,7 @@
 #include "pricers/lagrange_template.h"
 #include "pricers/farkas.h"
 #include "taskflow/taskflow.hpp"
+#include "gap_lagrangian.h"
 
 template <typename RmpSolver>
 struct AgeColumnManagement {
@@ -144,6 +145,14 @@ int solve_gap_solver(const std::string& filename, quill::CsvWriter<CsvSchema, qu
         });
 
         compact.solve(true, true);
+        return 0;
+    }
+    else if (params.pricing_method == "lr") {
+		// solve using lagrangian relaxation
+		GapInstance instance(filename);
+		GapLagrangian lagrangian_solver(instance, params);
+
+        lagrangian_solver.solve(csv_writer);
         return 0;
     }
     else if (params.init_method == "mt" || (params.init_method == "auto" && params.pricing_method == "mt")) {

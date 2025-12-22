@@ -10,7 +10,6 @@ struct GapPricing {
     size_t _machine = 0;
     const GapInstance* _instance = nullptr;
     std::vector<int> solution;
-	std::vector<bool> lb_bound;    // used for GUB branching
 	std::vector<double> scip_tmp;  // temporary storage for faster SCIP solve
 
     void init(uint32_t index, const GapInstance& instance) {

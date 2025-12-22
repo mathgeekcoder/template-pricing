@@ -6,13 +6,13 @@
 
 template <typename RmpSolver>
 struct GapCompact {
-	GapInstance& _instance;
+	const GapInstance& _instance;
 	HighsSolution _solution;
 	size_t iterations = 0;
 	std::unique_ptr<RmpSolver> highs;
 
 public:	
-	GapCompact(GapInstance& instance) : _instance(instance) {
+	GapCompact(const GapInstance& instance) : _instance(instance) {
 		highs = std::make_unique<RmpSolver>();
 	}
 

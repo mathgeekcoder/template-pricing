@@ -33,19 +33,11 @@ struct PricingBlockVector {
 
 	template <typename... Args>
 	void init(Args&&... args) {
-#ifdef _DEBUG
 		int k = 0;
 
 		for (auto& p : _pricing) {
 			p.init(k++, std::forward<Args>(args)...);
 		}
-#else
-		highs::parallel::for_each(0, size(), [&](HighsInt start, HighsInt end) {
-			for (int k = start; k < end; ++k) {
-				_pricing[k].init(k, std::forward<Args>(args)...);
-			}
-		});
-#endif
 	}
 };
 
