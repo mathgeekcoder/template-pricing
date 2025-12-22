@@ -21,19 +21,25 @@ If you use this code in your research, please cite the paper above.
 
 ## Minimal build instructions (vcpkg + CMake)
 
-Below are minimal steps to build on Windows (bash shell) using vcpkg.
+Below are minimal steps to build on linux using vcpkg.
 
-1. Install and bootstrap vcpkg if you don't have it already. Follow the instructions at https://github.com/microsoft/vcpkg.
+1. Install compiler and build tools:
 
-2. From the repository root:
+```bash
+apt install cmake ninja-build curl zip unzip tar
+```
+
+2. Install and bootstrap vcpkg if you don't have it already. Follow the instructions at https://github.com/microsoft/vcpkg.
+
+3. From the repository root:
 
 ```bash
 # configure variables
 export VCPKG_ROOT="$HOME/vcpkg"  # path to your vcpkg clone
 
 # build
-cmake --preset windows-release
-cmake --build out/build/windows-release
+cmake --preset linux-release
+cmake --build out/build/linux-release
 ```
 
 Notes:

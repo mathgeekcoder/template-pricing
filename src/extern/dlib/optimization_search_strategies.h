@@ -7,7 +7,7 @@
 #include <cmath>
 #include <limits>
 #include <cassert>
-#include "Eigen/Core"
+#include <Eigen/Core>
 #include "sequence_kernel_2.h"
 #include "optimization_line_search.h"
 
