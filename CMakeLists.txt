@@ -4,9 +4,10 @@ project("colgen_pricing" CXX)
 find_package(highs REQUIRED)
 find_package(argparse CONFIG REQUIRED)
 find_package(Taskflow CONFIG REQUIRED)
-find_path(QUILL_INCLUDE_DIRS "quill/Backend.h")
 find_package(nlohmann_json CONFIG REQUIRED)
+find_package(Eigen3 REQUIRED NO_MODULE)
 find_package(ZLIB REQUIRED)
+find_path(QUILL_INCLUDE_DIRS "quill/Backend.h")
 
 # Any source files added to include/ or source/ will automatically be added to the project.
 file(GLOB_RECURSE INCLUDE_FILES src/*.h)
@@ -36,7 +37,7 @@ if(GUROBI_ENABLED)
     target_compile_definitions(${PROJECT_NAME} PRIVATE SUPPORT_GUROBI) 
 endif()
 
-target_link_libraries(${PROJECT_NAME} highs::highs ${GUROBI_LIB} nlohmann_json::nlohmann_json ZLIB::ZLIB)
+target_link_libraries(${PROJECT_NAME} highs::highs ${GUROBI_LIB} nlohmann_json::nlohmann_json ZLIB::ZLIB Eigen3::Eigen)
 target_include_directories(${PROJECT_NAME} PUBLIC src)
 
 
