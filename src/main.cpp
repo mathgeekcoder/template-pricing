@@ -204,7 +204,7 @@ int main(int argc, char* argv[]) {
     if (!parameter_sweep(program, filePaths, taskflow)) {
         for (int replication = 1; replication <= num_replications; ++replication) {
             taskflow.for_each(filePaths.begin(), filePaths.end(), [&, replication](const fs::path& filename) {
-                std::string log_filename = std::format("{}-{}-best-output-{}-{}.csv", filename.filename().string(), pricing_method, replication, use_gurobi ? "gurobi" : "highs");
+                std::string log_filename = std::format("{}-{}-{}-output-{}-{}.csv", filename.filename().string(), pricing_method, init_method, replication, use_gurobi ? "gurobi" : "highs");
 
                 // check to see if output already exists, and if has been completed
                 if (!force && has_completed(log_filename)) {

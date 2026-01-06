@@ -223,6 +223,15 @@ public:
 		}
 	}
 
+	void setOptionValue(std::string option, double value) {
+		if (option == "mip_abs_gap") {
+			GRBsetdblparam(env, GRB_DBL_PAR_MIPGAPABS, value);
+		}
+		else if (option == "mip_rel_gap") {
+			GRBsetdblparam(env, GRB_DBL_PAR_MIPGAP, value);
+		}
+	}
+
 	// construct model from HiGHS model
 	void passModel(HighsModel& model) {
 		if (_model) {

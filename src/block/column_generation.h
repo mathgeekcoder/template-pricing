@@ -108,8 +108,9 @@ struct TemplatePricing {
 		}
 
 		for (auto& b : _template_columns) {
-			for (auto& c : b) {
-				c = (c > 1 - 1e-6) - (c < 1e-6);
+			for (int j = 0; j < _partitions; ++j) {
+				auto c = b[j] / solution.row_value[j];  // if using a cover, row_value might be > 1
+				b[j] = (c > 1 - 1e-6) - (c < 1e-6);
 			}
 		}
 	}

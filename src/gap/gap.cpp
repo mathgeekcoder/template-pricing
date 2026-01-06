@@ -198,10 +198,12 @@ int GapSolver<RmpSolver, FarkasType, PricerType>::solve() {
     column_management.init(rmp.get(), &instance, params);
 
     if (!restoreFeasibility(pricer_farkas)) {
+		bool time_limit_reached = params.time_limit > 0 && total_time.TotalSeconds() > params.time_limit;
+
 		// assume user interrupt
         csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, pricer_farkas.name, params.replication, iteration_count,
             _LB, _UB, "", "", "", "", rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(),
-            lp_iteration_count, "", "", 0, int((params.time_limit > 0 && total_time.TotalSeconds() > params.time_limit)), params_json, (int)LogStatus::UserInterrupt);
+            lp_iteration_count, "", "", 0, int(time_limit_reached), params_json, (int)(time_limit_reached ? LogStatus::TimeLimit : LogStatus::UserInterrupt));
 
         std::cout << std::format("\n"
             "Inst : {}\n"
@@ -439,6 +441,8 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
         }
 
         ++iteration_count;
+		should_stop |= (params.time_limit > 0 && total_time.TotalSeconds() > params.time_limit);
+
     } while (has_dual_ray == true && should_stop == false);
 
     if (!should_stop) {
