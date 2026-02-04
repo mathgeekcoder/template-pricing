@@ -129,7 +129,7 @@ double TemplatePrice<RmpSolver>::optimize(const std::vector<double>& duals, Pric
 
         for (int m = subrange.begin(); m < subrange.end(); m += subrange.step_size()) {
             for (int j = 0; j < _instance->jobs; ++j) {
-                obj[j] = duals[j] - _instance->profit[m][j];
+                obj[j] = duals[j] - _instance->costs[m][j];
             }
 
             reduced_costs[m] = _mip->_pricing[m].optimize_template(_template[m], obj, duals[_instance->jobs + m]);

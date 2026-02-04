@@ -491,9 +491,9 @@ void GapSolver<RmpSolver, FarkasType, PricerType>::updateCompactSolution() {
         if (fractional_count == 0) {
             double tmpUB = 0;
             for (int m = 0; m < instance.machines; ++m) {
-                auto& profit = instance.profit[m];
+                auto& costs = instance.costs[m];
                 for (int j = 0; j < instance.jobs; ++j) {
-                    tmpUB += profit[j] * std::ceil(_compact_solution[m * instance.jobs + j] - 1e-6);
+                    tmpUB += costs[j] * std::ceil(_compact_solution[m * instance.jobs + j] - 1e-6);
                 }
             }
 
@@ -572,7 +572,7 @@ double GapSolver<RmpSolver, FarkasType, PricerType>::remove_duplicates() {
 				double min_cost = std::numeric_limits<double>::max();
                 
 				for (int m : job_machines[j]) {
-					double cost = instance.profit[m][j];
+					double cost = instance.costs[m][j];
 					total_cost -= cost;
 
 					if (min_cost > cost) {
@@ -595,7 +595,7 @@ double GapSolver<RmpSolver, FarkasType, PricerType>::remove_duplicates() {
                     }
 				}
 
-                total_cost += instance.profit[best_machine][j];
+                total_cost += instance.costs[best_machine][j];
             }
 		}
 
@@ -603,7 +603,7 @@ double GapSolver<RmpSolver, FarkasType, PricerType>::remove_duplicates() {
         // need to do this for each of the machines
         for (int m = 0; m < instance.machines; ++m) {
             if (updated_machines[m]) {
-                double cost = sum(machine_jobs[m], 0.0, instance.profit[m]);
+                double cost = sum(machine_jobs[m], 0.0, instance.costs[m]);
                 machine_jobs[m].push_back(instance.jobs + m);
                 rmp->addCol(cost, 0, kHighsInf, static_cast<int>(machine_jobs[m].size()), machine_jobs[m].data(), _ones.data());
             }
@@ -619,12 +619,12 @@ int GapSolver<RmpSolver, FarkasType, PricerType>::add_columns(std::vector<double
     int count = 0;
 
     for (int m = 0; m < instance.machines; ++m) {
-        auto& profit = instance.profit[m];
+        auto& costs = instance.costs[m];
 
         if (reduced_costs[m] > 1e-6) {
 			auto& solution = pricing[m].solution;
             std::stable_sort(solution.begin(), solution.end()); // ensure columns are sorted for faster search
-            double cost = sum(solution.begin(), --solution.end(), 0.0, profit);
+            double cost = sum(solution.begin(), --solution.end(), 0.0, costs);
 
             rmp->addCol(cost, 0, kHighsInf, static_cast<int>(pricing[m].solution.size()), pricing[m].solution.data(), _ones.data());
             ++count;

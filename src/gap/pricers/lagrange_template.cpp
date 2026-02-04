@@ -15,7 +15,7 @@ double LagrangeTemplatePrice<RmpSolver>::optimize(const std::vector<double>& dua
         for (int m = subrange.begin(); m < subrange.end(); m += subrange.step_size()) {
             if (update_duals) {
                 for (int j = 0; j < _instance->jobs; ++j) {
-                    obj[j] = duals[j] - _instance->profit[m][j];
+                    obj[j] = duals[j] - _instance->costs[m][j];
                 }
             }
 

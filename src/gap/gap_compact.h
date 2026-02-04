@@ -61,7 +61,7 @@ private:
 
 		for (int m = 0; m < M; m++) {
 			for (int j = 0; j < J; j++) {
-				model.lp_.col_cost_[m * J + j] = _instance.profit[m][j];
+				model.lp_.col_cost_[m * J + j] = _instance.costs[m][j];
 			}
 		}
 

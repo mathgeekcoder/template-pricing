@@ -34,10 +34,10 @@ public:
             std::vector<double> obj(instance.jobs);
 
             for (int m = subrange.begin(); m < subrange.end(); m += subrange.step_size()) {
-                const std::vector<double>& profits = instance.profit[m];
+                const std::vector<double>& costs = instance.costs[m];
 
                 for (int j = 0; j < instance.jobs; ++j) {
-                    obj[j] = multipliers[j] - profits[j];
+                    obj[j] = multipliers[j] - costs[j];
                 }
 
                 values[m] = pricing[m].optimize(obj, 0);
@@ -61,11 +61,11 @@ public:
             VectorXd upper = VectorXd::Constant(instance.jobs, std::numeric_limits<double>::infinity());
 
 			for (int m = 0; m < instance.machines; ++m) {
-				const auto& profits = instance.profit[m];
+				const auto& costs = instance.costs[m];
 
 				for (int j : pricing[m].solution) {
-                    if (upper[j] > profits[j]) {
-                        upper[j] = profits[j];
+                    if (upper[j] > costs[j]) {
+                        upper[j] = costs[j];
 					}
 				}
 			}

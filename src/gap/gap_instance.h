@@ -11,7 +11,7 @@ using json = nlohmann::json;
 // Load a GAP instance from file
 // The file format is as follows:
 //  <number of machines> <number of jobs>
-//  <profit matrix>
+//  <cost matrix>
 //  <demand matrix>
 //  <capacity vector>
 struct GapInstance {
@@ -20,7 +20,7 @@ struct GapInstance {
     std::string name;
     std::vector<int> capacity;
     std::vector<std::vector<int>> demands;
-    std::vector<std::vector<double>> profit;
+    std::vector<std::vector<double>> costs;
 
     GapInstance(std::string file = "") {
         machines = jobs = 0;  // initialize to 0 in case of loading error
@@ -45,7 +45,7 @@ struct GapInstance {
         machines = j["nAgents"];
         jobs = j["nTasks"];
         capacity = j["capacity"].get<std::vector<int>>();
-        profit = j["cost"].get<std::vector<std::vector<double>>>();
+        costs = j["cost"].get<std::vector<std::vector<double>>>();
         demands = j["usage"].get<std::vector<std::vector<int>>>();
     }
 
@@ -54,11 +54,11 @@ struct GapInstance {
         if (in.is_open()) {
             in >> machines >> jobs;
             capacity.resize(machines);
-            profit.resize(machines, std::vector<double>(jobs));
+            costs.resize(machines, std::vector<double>(jobs));
             demands.resize(machines, std::vector<int>(jobs));
             for (int m = 0; m < machines; m++) {
                 for (int j = 0; j < jobs; j++)
-                    in >> profit[m][j];
+                    in >> costs[m][j];
             }
             for (int m = 0; m < machines; m++) {
                 for (int j = 0; j < jobs; j++)
@@ -74,7 +74,7 @@ struct GapInstance {
         out << machines << " " << jobs << "\n";
         for (int m = 0; m < machines; m++) {
             for (int j = 0; j < jobs; j++)
-                out << profit[m][j] << " ";
+                out << costs[m][j] << " ";
             out << "\n";
         }
         for (int m = 0; m < machines; m++) {

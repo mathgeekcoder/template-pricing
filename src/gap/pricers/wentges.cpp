@@ -92,15 +92,17 @@ double WentgesPrice<RmpSolver>::optimize(const std::vector<double>& dual_out, Pr
         std::vector<double> obj(_instance->jobs);
 
         for (int m = subrange.begin(); m < subrange.end(); m += subrange.step_size()) {
+			const auto& costs = _instance->costs[m];
+
             for (int j = 0; j < _instance->jobs; ++j) {
-                obj[j] = dual_sep[j] - _instance->profit[m][j];
+                obj[j] = dual_sep[j] - costs[j];
             }
 
             pricing[m].optimize(obj, dual_sep[_instance->jobs + m]);
 
             reduced_costs[m] = dual_out[_instance->jobs + m];
             for (auto j : pricing[m].solution) {
-                reduced_costs[m] += dual_out[j] - _instance->profit[m][j];
+                reduced_costs[m] += dual_out[j] - costs[j];
             }
 
             pricing[m].solution.push_back(_instance->jobs + m);
