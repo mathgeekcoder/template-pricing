@@ -64,8 +64,9 @@ struct LagrangeTemplateFarkas {
 
         // assumes lp colwise
 		const auto& solution = rmp->getSolution();
+        size_t dummy_cols = 2*_instance->jobs;
 
-        for (size_t i = _instance->jobs, end = solution.col_value.size(); i < end; ++i) {
+        for (size_t i = dummy_cols, end = solution.col_value.size(); i < end; ++i) {
             if (solution.col_value[i] > 1e-6) {
                 const auto& col = get_column(*rmp, i);
                 auto end = std::prev(col.end());  // assume last element is the block index
@@ -138,8 +139,9 @@ struct TemplateFarkas {
 
         // assumes lp colwise
         const auto& solution = rmp->getSolution();
+        size_t dummy_cols = 2*_instance->jobs;
 
-        for (size_t i = _instance->jobs, end = solution.col_value.size(); i < end; ++i) {
+        for (size_t i = dummy_cols, end = solution.col_value.size(); i < end; ++i) {
             if (solution.col_value[i] > 1e-6) {
                 const auto& col = get_column(*rmp, i);
                 auto end = std::prev(col.end());  // assume last element is the block index

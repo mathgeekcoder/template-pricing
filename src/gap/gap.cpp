@@ -339,23 +339,24 @@ cg_time.pause();
 template <typename RmpSolver, template<typename> class FarkasType, template<typename> class PricerType>
 bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType<RmpSolver>& pricer_farkas) {
     bool has_dual_ray = false;
-    int offset = instance.jobs;
+    int dummy_cols = 2*instance.jobs;
 
     // phase I primal simplex to get dual ray
-	// modify with dummy variables, one per job (machines are covered by initial columns)
+	// modify with dummy variables, two per job [+/-] (machines are covered by initial columns)
+	// the negative dummy variables are only required when the RMP is a set partitioning model
     std::vector<double> ones(instance.jobs + instance.machines, 1.0);
-    std::vector<double> zeros(offset, 0.0);
-    std::vector<double> upper(offset, kHighsInf);
+    std::vector<double> minus(instance.jobs, -1.0);
+    std::vector<double> zeros(instance.jobs, 0.0);
+    std::vector<double> upper(instance.jobs, kHighsInf);
     std::vector<double> costs;
 
-    std::vector<int> start(offset + 1);
-    std::vector<int> index(offset);
-
+    std::vector<int> start(instance.jobs + 1);
+    std::vector<int> index(instance.jobs);
     std::iota(start.begin(), start.end(), 0);
     std::iota(index.begin(), index.end(), 0);
 
-    rmp->addCols(offset, ones.data(), zeros.data(), upper.data(), index.size(), start.data(), index.data(), ones.data());
-    rmp->run();
+    rmp->addCols(instance.jobs, ones.data(), zeros.data(), upper.data(), index.size(), start.data(), index.data(), ones.data());
+    rmp->addCols(instance.jobs, ones.data(), zeros.data(), upper.data(), index.size(), start.data(), index.data(), minus.data());
 
     // initialize RMP if empty
     cg_time.start();
@@ -376,11 +377,10 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
     do {
         rmp_time.start();
         auto status = rmp->run();
-        HighsModelStatus modelStatus = HighsModelStatus::kOptimal;
+        auto modelStatus = rmp->getModelStatus();
+        double count_infeasibilities = std::ceil(rmp->getObjectiveValue() - 1e-6);
 
-        double count_infeasibilities = std::floor(rmp->getObjectiveValue());
-
-        if (count_infeasibilities > 1e-6) {
+        if (rmp->getObjectiveValue() > 1e-6) {
             modelStatus = HighsModelStatus::kInfeasible;
         }
 
@@ -406,16 +406,16 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
         const HighsInt* basis = rmp->getBasicVariablesArray();
         const uint32_t num_col = rmp->getNumCol();
         uint32_t basis_size = 0;
-        column_management._age.resize(num_col - offset, iteration_count - 1);
+        column_management._age.resize(num_col - dummy_cols, iteration_count - 1);
 
         for (uint32_t i = 0; i < rmp->getNumRow(); ++i) {
             uint32_t idx = basis[i];
 
             // include all basis columns, even if they have zero value
             // this helps reduce number of simplex pivots
-            if (idx < num_col && idx >= offset) {
+            if (idx < num_col && idx >= dummy_cols) {
                 bool non_zero = solution.col_value[idx] > 1e-6;
-                column_management._age[idx - offset] = iteration_count + non_zero;
+                column_management._age[idx - dummy_cols] = iteration_count + non_zero;
                 basis_size += non_zero;
             }
         }
@@ -443,7 +443,7 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
 
         // debugging
         if (iteration_count % ITERATION_OUTPUT == 0 && total_time.TotalSeconds() - previous_logging_time > ITERATION_TIME && has_dual_ray) {
-            tbl.output(iteration_count, _LB, "-", "-", "-", "-", "-", rmp->getNumCol() - offset, total_time.TotalSeconds(), lp_iteration_count, -count_infeasibilities);
+            tbl.output(iteration_count, _LB, "-", "-", "-", "-", "-", rmp->getNumCol() - dummy_cols, total_time.TotalSeconds(), lp_iteration_count, -count_infeasibilities);
             previous_logging_time = total_time.TotalSeconds();
         }
 
@@ -455,10 +455,11 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
     if (!should_stop) {
 		// remove dummy variables and restore costs
         rmp->deleteCols(static_cast<int>(index.size()), index.data());
+        rmp->deleteCols(static_cast<int>(index.size()), index.data());
         rmp->changeColsCost(0, costs.size() - 1, costs.data());
 
         rmp->run();
-        return true;
+        return rmp->getModelStatus() == HighsModelStatus::kOptimal;
     }
     else {
         return false;
