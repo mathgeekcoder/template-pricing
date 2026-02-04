@@ -227,22 +227,23 @@ int GapSolver<RmpSolver, FarkasType, PricerType>::solve() {
         lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), lp_iteration_count / static_cast<double>(rmp->getNumCol()), int(basis_size == instance.machines), int(false), params_json, (int)LogStatus::Feasible);
 
     // primal simplex for warm-start "add columns"
-    //rmp->setOptionValue("simplex_strategy", "4");
-    //rmp->setOptionValue("allow_unbounded_or_infeasible", false);  // not sure if this adds unnecessary overheads
-    //rmp->setOptionValue(kSolverString, kIpmString);
-    //rmp->setOptionValue(kRunCrossoverString, kHighsOffString);
     pricer.init_feasible();
-    //column_management.init(rmp.get(), &instance, params);
 
     double avg_pivots_per_column = lp_iteration_count / static_cast<double>(rmp->getNumCol()) / static_cast<double>(iteration_count);
 
     if (params.nodes > 0) {
         do {
+			// Enable for faster time limit termination checks
+            //if (params.time_limit > 0) {
+            //    rmp->setOptionValue("time_limit", params.time_limit - total_time.TotalSeconds());
+            //}
+
 rmp_time.start();
             auto status = rmp->run();
+            auto modelStatus = rmp->getModelStatus();
 rmp_time.pause();
 
-            if (rmp->getModelStatus() != HighsModelStatus::kOptimal) {
+            if (modelStatus != HighsModelStatus::kOptimal && modelStatus != HighsModelStatus::kTimeLimit) {
                 std::cout << std::format("{} {}: Error - {}\n", instance.name, pricer.name, (int)rmp->getModelStatus());
                 return -1;
             }
@@ -262,16 +263,21 @@ cg_time.pause();
             column_management.reduce(iteration_count);
             added_columns = add_columns(_reduced_costs);
 
-            // ASSUMES lambda <= 1, otherwise need to scale (e.g. _rmpLB / (1 + reduced cost))
-            // This is only valid in root node, otherwise need to keep track of worst node
-            _LB = std::max(_LB, _rmpLB - optimal_pricing);
-
-           // check if we can stop
             double lb = std::ceil(_LB - 1e-6);
             double gap = (_UB - lb) / _UB;
 
-            if (gap < params.gap || lb + 1e-6 >= _rmpLB)
-                break;
+            if (modelStatus == HighsModelStatus::kOptimal) {
+                // ASSUMES lambda <= 1, otherwise need to scale (e.g. _rmpLB / (1 + reduced cost))
+                // This is only valid in root node, otherwise need to keep track of worst node
+                _LB = std::max(_LB, _rmpLB - optimal_pricing);
+
+                // check if we can stop
+                lb = std::ceil(_LB - 1e-6);
+                gap = (_UB - lb) / _UB;
+
+                if (gap < params.gap || lb + 1e-6 >= _rmpLB)
+                    break;
+            }
 
             // logging
             csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, pricer_farkas.name, params.replication, iteration_count,
@@ -360,7 +366,8 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
 		// capture costs of added columns and replace with zero cost for phase I
         costs.resize(costs.size() + added);
 		getColsCost(*rmp, from, from + added - 1, &costs.back() - added + 1);
-		rmp->changeColsCost(from, from + added - 1, zeros.data());
+        rmp->changeColsCost(from, from + added - 1, zeros.data());
+
         ++iteration_count;
     }
     cg_time.pause();
@@ -371,9 +378,9 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
         auto status = rmp->run();
         HighsModelStatus modelStatus = HighsModelStatus::kOptimal;
 
-        double count_infeasibilities = rmp->getObjectiveValue();
+        double count_infeasibilities = std::floor(rmp->getObjectiveValue());
 
-        if (rmp->getObjectiveValue() > 1e-6) {
+        if (count_infeasibilities > 1e-6) {
             modelStatus = HighsModelStatus::kInfeasible;
         }
 
@@ -406,7 +413,7 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
 
             // include all basis columns, even if they have zero value
             // this helps reduce number of simplex pivots
-            if (idx < num_col && idx > offset) {
+            if (idx < num_col && idx >= offset) {
                 bool non_zero = solution.col_value[idx] > 1e-6;
                 column_management._age[idx - offset] = iteration_count + non_zero;
                 basis_size += non_zero;
@@ -417,7 +424,7 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
         if (has_dual_ray) {
             pricer_farkas.update(rmp.get());
 
-            if (pricer_farkas.optimize(rmp->getSolution().row_dual, pricing, _reduced_costs) > -kHighsInf) {
+            if (pricer_farkas.optimize(solution.row_dual, pricing, _reduced_costs) > -kHighsInf) {
                 //column_management.reduce(iteration_count);
                 int from = rmp->getNumCol();
                 int added = add_columns(_reduced_costs);
