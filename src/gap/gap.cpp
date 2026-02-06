@@ -239,9 +239,9 @@ int GapSolver<RmpSolver, FarkasType, PricerType>::solve() {
     if (params.nodes > 0) {
         do {
 			// Enable for faster time limit termination checks
-            //if (params.time_limit > 0) {
-            //    rmp->setOptionValue("time_limit", params.time_limit - total_time.TotalSeconds());
-            //}
+            if (params.time_limit > 0) {
+                rmp->setOptionValue("time_limit", params.time_limit - total_time.TotalSeconds());
+            }
 
 rmp_time.start();
             auto status = rmp->run();
@@ -252,6 +252,9 @@ rmp_time.pause();
                 std::cout << std::format("{} {}: Error - {}\n", instance.name, pricer.name, (int)rmp->getModelStatus());
                 return -1;
             }
+            else if (modelStatus == HighsModelStatus::kTimeLimit) {
+                break;
+			}
 
             _rmpLB = rmp->getObjectiveValue();
             auto& solution = rmp->getSolution();
@@ -380,12 +383,21 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
 
     // tight loop to restore feasibility (assuming possible!)
     do {
+        // Enable for faster time limit termination checks
+        if (params.time_limit > 0) {
+            rmp->setOptionValue("time_limit", params.time_limit - total_time.TotalSeconds());
+        }
+
         rmp_time.start();
         auto status = rmp->run();
         auto modelStatus = rmp->getModelStatus();
         double count_infeasibilities = std::ceil(rmp->getObjectiveValue() - 1e-6);
+        rmp_time.pause();
 
-        if (rmp->getObjectiveValue() > 1e-6) {
+        if (modelStatus == HighsModelStatus::kTimeLimit) {
+            return false;
+		}
+        else if (rmp->getObjectiveValue() > 1e-6) {
             modelStatus = HighsModelStatus::kInfeasible;
         }
 
@@ -404,7 +416,6 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
             std::cout << std::format("{}: Error proving infeasibility and calculating dual ray - {}\n", instance.name, (int)modelStatus);
             return false;
         }
-        rmp_time.pause();
 
         // age the columns
         const auto& solution = rmp->getSolution();
