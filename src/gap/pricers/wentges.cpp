@@ -127,7 +127,7 @@ double WentgesPrice<RmpSolver>::optimize(const std::vector<double>& dual_out, Pr
     auto finalize = taskflow.emplace([&]() {
         // Compute subgradient at separation point
         // even if RMP is a cover on jobs, we want to find the subgradient for a partition
-        std::fill(g_sep.begin(), g_sep.begin() + _instance->jobs, -1);
+        std::fill(g_sep.begin(), g_sep.end(), -1);
 
         for (int m = 0; m < _instance->machines; ++m) {
             for (int j : pricing[m].solution) {
