@@ -200,10 +200,15 @@ int GapSolver<RmpSolver, FarkasType, PricerType>::solve() {
     if (!restoreFeasibility(pricer_farkas)) {
 		bool time_limit_reached = params.time_limit > 0 && total_time.TotalSeconds() > params.time_limit;
 
-		// assume user interrupt
         csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, pricer_farkas.name, params.replication, iteration_count,
             _LB, _UB, "", "", "", "", rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(),
             lp_iteration_count, "", "", 0, int(time_limit_reached), params_json, (int)(time_limit_reached ? LogStatus::TimeLimit : LogStatus::UserInterrupt));
+
+        if (time_limit_reached) {
+            csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, pricer_farkas.name, params.replication, iteration_count,
+                _LB, _UB, "", "", "", "", rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(),
+                lp_iteration_count, "", "", 0, int(time_limit_reached), params_json, (int)(LogStatus::ValidTermination));
+        }
 
         std::cout << std::format("\n"
             "Inst : {}\n"
@@ -443,7 +448,7 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
 
         // debugging
         if (iteration_count % ITERATION_OUTPUT == 0 && total_time.TotalSeconds() - previous_logging_time > ITERATION_TIME && has_dual_ray) {
-            tbl.output(iteration_count, _LB, "-", "-", "-", "-", "-", rmp->getNumCol() - dummy_cols, total_time.TotalSeconds(), lp_iteration_count, -count_infeasibilities);
+            tbl.output(iteration_count, _LB, "-", "-", "-", "-", basis_size, rmp->getNumCol() - dummy_cols, total_time.TotalSeconds(), lp_iteration_count, -count_infeasibilities);
             previous_logging_time = total_time.TotalSeconds();
         }
 
