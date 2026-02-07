@@ -184,8 +184,10 @@ int GapSolver<RmpSolver, FarkasType, PricerType>::solve() {
 	rmp->setOptionValue("simplex_strategy", "4"); // primal simplex
     std::function<HighsInt()> get_lp_iters = [&]() { return rmp->getInfo().simplex_iteration_count; };
 
-    auto model = SetCoverRestrictedProblem(instance.jobs, instance.machines, ObjSense::kMinimize);
-    //auto model = SetPartitionRestrictedProblem(instance.jobs, instance.machines, ObjSense::kMinimize);
+    auto model = params.set_partition 
+        ? SetPartitionRestrictedProblem(instance.jobs, instance.machines, ObjSense::kMinimize) 
+        : SetCoverRestrictedProblem(instance.jobs, instance.machines, ObjSense::kMinimize);
+
     rmp->passModel(model);
     pricer.init(&_executor, rmp.get(), &instance);
 
@@ -365,6 +367,7 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
 
     rmp->addCols(instance.jobs, ones.data(), zeros.data(), upper.data(), index.size(), start.data(), index.data(), ones.data());
     rmp->addCols(instance.jobs, ones.data(), zeros.data(), upper.data(), index.size(), start.data(), index.data(), minus.data());
+    //rmp->setOptionValue("simplex_strategy", "1"); // dual simplex
 
     // initialize RMP if empty
     cg_time.start();
@@ -474,6 +477,7 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
         rmp->deleteCols(static_cast<int>(index.size()), index.data());
         rmp->changeColsCost(0, costs.size() - 1, costs.data());
 
+        //rmp->setOptionValue("simplex_strategy", "4"); // primal simplex
         rmp->run();
         return rmp->getModelStatus() == HighsModelStatus::kOptimal;
     }

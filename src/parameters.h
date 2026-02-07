@@ -13,20 +13,22 @@ struct Parameters {
 	int replication = 0;
 	int nodes = 1; // 0 for farkas, 1 for root node (> 0 for branching, support has been removed)
 	int num_threads = 1;
-	bool show_output = true;
+	static const bool show_output = true;
+	bool set_partition = false;
 	char solver[7] = "highs"; // Options: highs, gurobi
 	std::string pricing_method;
 	std::string init_method;
 
 	std::string to_json() const {
 		return std::format(
-			"{{timeout:{},max_col_multiplier:{},age_limit:{},random_seed:{},replication:{},num_threads:{}}}",
+			"{{timeout:{},max_col_multiplier:{},age_limit:{},random_seed:{},replication:{},num_threads:{},set_partition:{}}}",
 			time_limit,
 			max_col_multiplier,
 			age_limit,
 			random_seed,
 			replication,
-			num_threads
+			num_threads,
+			set_partition
 		);
 	}
 };

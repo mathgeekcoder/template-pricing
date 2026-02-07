@@ -67,9 +67,17 @@ int main(int argc, char* argv[]) {
         .flag()
         .help("force overwrite of existing log files");
 
+    program.add_argument("--farkas_only")
+        .flag()
+        .help("only perform RMP initialization");
+
     program.add_argument("-g", "--gurobi")
         .flag()
         .help("use Gurobi solver");
+
+    program.add_argument("--set_partition")
+        .flag()
+        .help("use set partition RMP (instead of cover)");
 
     program.add_argument("-m", "--method")
         .default_value(std::string("lt"))
@@ -150,7 +158,9 @@ int main(int argc, char* argv[]) {
     std::string init_method = program.get<std::string>("--init");
 
 	bool force = program.get<bool>("--force");
+	bool farkas_only = program.get<bool>("--farkas_only");
 	bool use_gurobi = program.get<bool>("--gurobi");
+	bool set_partition = program.get<bool>("--set_partition");
 
     int seed = program.get<int>("--seed");
     int num_replications = program.get<int>("--replications");
@@ -234,6 +244,8 @@ int main(int argc, char* argv[]) {
                             params.random_seed = (seed == -1 ? (20 - retries) * 100 + (replication - 1) : seed);
                             params.num_threads = num_threads;
                             params.replication = replication;
+							params.nodes = (farkas_only ? 0 : 1);
+							params.set_partition = set_partition;
                             strcpy(params.solver, (use_gurobi ? "gurobi" : "highs"));
                             params.init_method = init_method;
                             params.pricing_method = pricing_method;
