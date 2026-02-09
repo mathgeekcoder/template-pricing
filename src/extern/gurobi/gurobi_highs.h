@@ -466,6 +466,14 @@ public:
 		}
 		return idx;
 	}
+
+	void writeModel(std::string filename) {
+		if (_model) {
+			GRBwrite(_model, filename.c_str());
+		}
+	}
+
+	void zeroAllClocks() {}
 };
 
 #endif

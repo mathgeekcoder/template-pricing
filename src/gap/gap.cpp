@@ -242,6 +242,7 @@ int GapSolver<RmpSolver, FarkasType, PricerType>::solve() {
         do {
 			// Enable for faster time limit termination checks
             if (params.time_limit > 0) {
+                rmp->zeroAllClocks();
                 rmp->setOptionValue("time_limit", params.time_limit - total_time.TotalSeconds());
             }
 
@@ -388,6 +389,7 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
     do {
         // Enable for faster time limit termination checks
         if (params.time_limit > 0) {
+            rmp->zeroAllClocks();
             rmp->setOptionValue("time_limit", params.time_limit - total_time.TotalSeconds());
         }
 
