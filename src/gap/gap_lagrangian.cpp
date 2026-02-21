@@ -25,7 +25,7 @@ public:
     }
 
     double operator()(const VectorXd& multipliers) {
-		cg_time.start();
+        cg_time.start();
         tf::Taskflow taskflow;
         tf::IndexRange range(0, instance.machines, 1);
 
@@ -46,7 +46,13 @@ public:
             }
         });
 
-        _executor->run(std::move(taskflow)).wait();
+        try {
+            _executor->run(std::move(taskflow)).get();
+        }
+        catch (const std::exception& e) {
+			throw e;  // rethrow to be caught in the main loop and stop execution
+		}
+
         ++iteration_count;
 
         // we negate because L-BFGS minimizes, but we want to maximize
@@ -124,8 +130,7 @@ void GapLagrangian::solve(quill::CsvWriter<CsvSchema, quill::FrontendOptions>& c
         return (timer.TotalSeconds() > params.time_limit) || should_stop || (lb >= problem.upper_bound);
     };
 
-    // initial solution (ones) seems to avoid issues on some instances (previously initialized to zeroes)
-    Eigen::VectorXd x = Eigen::VectorXd::Ones(instance.jobs);
+    Eigen::VectorXd x = Eigen::VectorXd::Zero(instance.jobs);
 
     auto func = [&](const Eigen::VectorXd& x) { return problem(x); };
 	auto grad = [&](const Eigen::VectorXd& x) { return problem.gradient; };
@@ -133,36 +138,44 @@ void GapLagrangian::solve(quill::CsvWriter<CsvSchema, quill::FrontendOptions>& c
 	auto search_strategy = dlib::lbfgs_search_strategy(256);
 	auto stop_strategy = dlib::objective_delta_stop_strategy(&callback, 1e-6);
 
-//	dlib::find_min_box_constrained(search_strategy, stop_strategy, func, grad, x);
-    dlib::find_min(search_strategy, stop_strategy, func, grad, x);
+    try {
+        //	dlib::find_min_box_constrained(search_strategy, stop_strategy, func, grad, x);
+        dlib::find_min(search_strategy, stop_strategy, func, grad, x);
+	    _bound = problem.lower_bound;
+        timer.pause();
 
-	_bound = problem.lower_bound;
-    timer.pause();
+        // store and output results
+        _multipliers.resize(instance.jobs);
 
-    // store and output results
-    _multipliers.resize(instance.jobs);
+        for (int j = 0; j < instance.jobs; ++j) {
+            _multipliers[j] = x[j];
+        }
 
-    for (int j = 0; j < instance.jobs; ++j) {
-        _multipliers[j] = x[j];
+        tbl.output(problem.iteration_count, _bound, problem.upper_bound, "", timer.TotalSeconds());
+
+        if (should_stop) {
+            std::cout << std::format("{} Lagrangian Relaxation: Stopped by user.\n", instance.name);
+        }
+        else {
+            // final entry
+            double gap = (problem.upper_bound - _bound) / problem.upper_bound;
+
+            csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, "lr", params.solver, "na", params.replication, problem.iteration_count,
+                _bound, problem.upper_bound, gap * 100, _bound, 0, 0, 0, timer.TotalSeconds() - problem.cg_time.TotalSeconds(), problem.cg_time.TotalSeconds(), timer.TotalSeconds(),
+                "", "", "", int(problem.upper_bound < std::numeric_limits<double>::infinity()), int(params.time_limit > 0 && timer.TotalSeconds() > params.time_limit), "", 1);
+        }
+
+        std::cout << std::format("\n"
+            "Inst: {}\n"
+            "Time: {:.3f} s\n"
+            "#Its: {}\n",
+            instance.name, timer.TotalSeconds(), stop_strategy._cur_iter);
     }
-
-    tbl.output(problem.iteration_count, _bound, problem.upper_bound, "", timer.TotalSeconds());
-
-    if (should_stop) {
-        std::cout << std::format("{} Lagrangian Relaxation: Stopped by user.\n", instance.name);
-    }
-    else {
-        // final entry
-        double gap = (problem.upper_bound - _bound) / problem.upper_bound;
+    catch (const std::exception& e) {
+        std::cerr << std::format("{} Lagrangian Relaxation: Optimization error: {}\n", instance.name, e.what());
 
         csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, "lr", params.solver, "na", params.replication, problem.iteration_count,
-            _bound, problem.upper_bound, gap * 100, _bound, 0, 0, 0, timer.TotalSeconds() - problem.cg_time.TotalSeconds(), problem.cg_time.TotalSeconds(), timer.TotalSeconds(),
-            "", "", "", int(problem.upper_bound < std::numeric_limits<double>::infinity()), int(params.time_limit > 0 && timer.TotalSeconds() > params.time_limit), "", 1);
+            problem.lower_bound, problem.upper_bound, "", problem.lower_bound, 0, 0, 0, timer.TotalSeconds() - problem.cg_time.TotalSeconds(), problem.cg_time.TotalSeconds(), timer.TotalSeconds(),
+            "", "", "", int(problem.upper_bound < std::numeric_limits<double>::infinity()), int(params.time_limit > 0 && timer.TotalSeconds() > params.time_limit), "", -7);
     }
-
-    std::cout << std::format("\n"
-        "Inst: {}\n"
-        "Time: {:.3f} s\n"
-        "#Its: {}\n",
-        instance.name, timer.TotalSeconds(), stop_strategy._cur_iter);
 }
