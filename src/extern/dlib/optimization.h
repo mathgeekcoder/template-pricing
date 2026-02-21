@@ -12,9 +12,44 @@
 
 namespace dlib
 {
-	auto clamp(const Eigen::VectorXd& v, const Eigen::VectorXd& lb, const Eigen::VectorXd& ub) {
+	static inline auto clamp(const Eigen::VectorXd& v, const Eigen::VectorXd& lb, const Eigen::VectorXd& ub) {
 		return v.cwiseMin(ub).cwiseMax(lb);
 	}
+
+
+	template <typename funct>
+	struct clamped_function_object
+	{
+		clamped_function_object(
+			const funct& f_,
+			const Eigen::VectorXd& x_lower_,
+			const Eigen::VectorXd& x_upper_
+		) : f(f_), x_lower(x_lower_), x_upper(x_upper_)
+		{
+		}
+
+		template <typename T>
+		double operator() (
+			const T& x
+			) const
+		{
+			return f(clamp(x, x_lower, x_upper));
+		}
+
+		const funct& f;
+		const Eigen::VectorXd& x_lower;
+		const Eigen::VectorXd& x_upper;
+	};
+
+	template <typename funct>
+	clamped_function_object<funct> clamp_function(
+		const funct& f,
+		const Eigen::VectorXd& x_lower,
+		const Eigen::VectorXd& x_upper
+	) {
+		return clamped_function_object<funct>(f, x_lower, x_upper);
+	}
+
 
 	template <typename T, typename U, typename V>
 	T zero_bounded_variables(const double eps, T vect, const T& x, const T& gradient, const U& x_lower, const V& x_upper) {
@@ -63,7 +98,7 @@ namespace dlib
 		typename funct_der>
 	double find_min_box_constrained(
 		search_strategy_type search_strategy,
-		stop_strategy_type stop_strategy,
+		stop_strategy_type& stop_strategy,
 		const funct& f,
 		const funct_der& der,
 		Eigen::VectorXd& x,
@@ -132,7 +167,7 @@ namespace dlib
 	>
 	double find_min_box_constrained(
 		search_strategy_type search_strategy,
-		stop_strategy_type stop_strategy,
+		stop_strategy_type& stop_strategy,
 		const funct& f,
 		const funct_der& der,
 		Eigen::VectorXd& x,
