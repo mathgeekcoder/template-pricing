@@ -19,7 +19,8 @@ enum class LogStatus {
     Feasible = -1,
     TimeLimit = -4,
     UserInterrupt = -5,
-    CompactOptimal = 6
+    CompactOptimal = 6,
+	FatalError = -7
 };
 
 // Helper to apply RmpSolver template parameter to a list of pricer templates
@@ -154,6 +155,7 @@ int GapSolver<RmpSolver, FarkasType, PricerType>::solve() {
     presolve();
 
 	if (_UB == _LB) {
+        tbl.output(iteration_count, _LB, _UB, "-", "-", "-", "-", "-", total_time.TotalSeconds(), lp_iteration_count, "-");
         std::cout << std::format("Compact solution is integer optimal.");
 
         // final entry
