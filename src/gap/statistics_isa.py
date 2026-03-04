@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import argparse
+from ast import alias
 import math
+from socket import timeout
 import sys
 from pathlib import Path
 import polars as pl
@@ -14,7 +16,7 @@ COLUMNS = [
    "jobs",
    "algorithm",
    "solver",
-   "retention",
+   "farkas",
    "replication",
    "iterations",
    "lb",
@@ -106,14 +108,14 @@ def main(argv=None):
         print(f"Failed to read CSV: {e}", file=sys.stderr)
         return 3
 
-    # Read optimal values from ../instances/gap/optimal_gap.csv
-    # assumed columns: instance,rmp_opt,integer_opt
+    # Read optimal values from ../results/isa-optimal.csv
+    # assumed columns: instance,rmp_opt
     try:
         optimal_df = pl.read_csv(
-            Path(__file__).parent.parent.parent / "results" / "original-optimal.csv",
+            Path(__file__).parent.parent.parent / "results" / "isa-optimal.csv",
             infer_schema_length=1000,
             null_values=["", "NA", "NaN", "null", "inf"]
-        )
+        ).select(["instance", "rmp_opt"])
 
         df = df.join(optimal_df, on="instance", how="left")
 
@@ -134,17 +136,25 @@ def main(argv=None):
     # Farkas Initialization (sorted by custom algorithm order)
 
     # NOTE: for any 'instance', 'algorithm' that is missing 'last' == -1 or 6,
-    farkas = df.filter(pl.col("last").is_in([-1, 6])).filter(pl.col("rmp_opt").is_not_null())
+    farkas = df.filter(pl.col("last").is_in([-1, 6, -4])).filter(pl.col("rmp_opt").is_not_null())
+
+    # cap rmptime at 3600 seconds for timeout entries
+    farkas = farkas.with_columns([
+        pl.when(pl.col("rmptime") > 3600)
+          .then(3600)
+          .otherwise(pl.col("rmptime"))
+          .alias("rmptime_cap")
+    ])
 
     farkas = (
         farkas
           .group_by(["algorithm"])
           .agg([
-              avg_expr("rmptime"),
+              avg_expr("rmptime_cap"),
               avg_expr("cgtime"),
               avg_expr("iterations"),
               avg_expr("has_integer"),
-              (pl.col("time") >= 3600).sum().alias(f"timeout"),
+              (pl.col("time") >= 600).sum().alias(f"timeout"),
               pl.len().alias("count"),
 
               # gap relative to optimal integer solution
@@ -157,30 +167,47 @@ def main(argv=None):
           .drop("_alg_order")
     )
 
-    #print(farkas)
+    print(farkas)
+
 
     # capture cumulative count of solved vs time for each algorithm,
     # where time is quantized in minutes and cumulative count is number of instances solved within that time
     solved = df.filter(pl.col("last").is_in([1])).filter(pl.col("rmp_opt").is_not_null())
 
+    # solved = solved.with_columns([
+    #     pl.when(pl.col("time") > 3600)
+    #       .then(3600*2)
+    #       .otherwise(pl.col("time"))
+    #       .alias("time_cap")
+    # ])
+
+    # print LT instances that don't time out, but also don't solve to optimality (rmp_opt != LB)
+    print(solved.filter(pl.col("algorithm") == "LT")
+          .filter(pl.col("timeout") == 0)
+          .filter(pl.col("rmp_opt") != (pl.col("lb") - 1e-6).ceil()))
+
+
+    # only consider instances solved to optimality (rmp_opt == LB)
+    solved = solved.filter(((pl.col("algorithm") != "lr") | (pl.col("rmp_opt") <= (pl.col("lb") - 1e-6).ceil())))
+    solved = solved.filter(pl.col("timeout") == 0)
+
+    print(solved.group_by("algorithm").agg(pl.len().alias("count")))
+
     solved = solved.with_columns([
-        pl.when(pl.col("time") > 21600)
-          .then(21600*2)
+        pl.when(pl.col("time") > 3600)
+          .then(3600)
           .otherwise(pl.col("time"))
           .alias("time_cap")
     ])
 
-    # only consider instances solved to optimality (rmp_opt == LB)
-    solved = solved.filter(pl.col("rmp_opt") == (pl.col("lb") - 1e-6).ceil())
-
     # quantize time to minutes
     solved = solved.with_columns([
-        ((pl.col("time_cap") // 30) / 2.0 + 1).cast(pl.Float64).alias("time_minutes")
+        ((pl.col("time_cap") // 30) / 2.0).cast(pl.Float64).alias("time_minutes")
     ])
 
-    # create a complete range of time_minutes from 0 to 360 in 0.5 increments
+    # create a complete range of time_minutes from 0 to 60 in 0.5 increments
     all_time_minutes = pl.DataFrame({
-        "time_minutes": [i / 2.0 for i in range(0, 721)]  # 0, 0.5, 1, ..., 360
+        "time_minutes": [i / 2.0 for i in range(0, 121)]  # 0, 0.5, 1, ..., 60
     })
 
     # group by algorithm and time_minutes, count instances, then compute cumulative sum
@@ -191,27 +218,36 @@ def main(argv=None):
             values="cumsum", index="time_minutes",
             on="algorithm").sort("time_minutes"))
 
+    print(solved)
+
     # join with all_time_minutes to ensure no gaps, then forward fill
     solved = (all_time_minutes
         .join(solved, on="time_minutes", how="left")
         .sort("time_minutes")
         .fill_null(strategy="forward")
         .fill_null(0)  # fill any remaining nulls at the start with 0
-        .filter(pl.col("time_minutes") <= 360))
+        .filter(pl.col("time_minutes") <= 60))
 
     # convert cumsum to percentage, i.e., divide by 1735 instances
     solved = solved.with_columns([
-        (pl.col("Dantzig") / 285 * 100).alias("D"),
-        (pl.col("Wentges") / 285 * 100).alias("P"),
-        (pl.col("LT") / 285 * 100).alias("LT"),
-        (pl.col("MT") / 285 * 100).alias("MT"),
-    ]).select(["time_minutes", "D", "P", "LT", "MT"])
+        (pl.col("Wentges") / 1735 * 100).alias("Wentges"),
+        (pl.col("LT") / 1735 * 100).alias("LT"),
+        (pl.col("lr") / 1735 * 100).alias("LR"),
+    ]).select(["time_minutes", "Wentges", "LT", "LR"])
 
     print(solved)
     solved.write_csv("agg_solved.csv")
 
 
+
     stats = df.filter(pl.col("last").is_in([1])).filter(pl.col("rmp_opt").is_not_null())
+
+    stats = stats.with_columns([
+        pl.when(pl.col("rmptime") > 3600)
+          .then(3600)
+          .otherwise(pl.col("rmptime"))
+          .alias("rmptime_cap")
+    ])
 
     # replace "#NAME?" or "nan" in "gap" column with null, then cast to float
     stats = stats.with_columns([
@@ -225,16 +261,19 @@ def main(argv=None):
         stats
           .group_by(["algorithm"])
           .agg([
-              pl.len().alias("count"),
-              (sum_expr("timeout") / 285).alias("timeout"),
+              (1735 - sum_expr("timeout")).alias("non-timeouts"),
+              (1-sum_expr("timeout") / 1735).alias("solved"),
+              ((pl.col("rmp_opt") <= (pl.col("lb") - 1e-6).ceil()) & (pl.col("timeout") == 0)).sum().alias("lr_treated_as_solved"),
               avg_expr("iterations"),
-              avg_expr("rmptime"),
+              avg_expr("rmptime_cap"),
               avg_expr("cgtime"),
 
               avg_expr("lpiters_per_column"),
               (sum_expr("lpiters") / sum_expr("rmptime")).alias("lpss"),
-              (sum_expr("has_integer") / 285).alias("integral"),
+              (sum_expr("has_integer") / 1735).alias("integral"),
               avg_expr("gap"),
+              pl.len().alias("count"),
+              (pl.col("rmp_opt") <= (pl.col("lb") - 1e-6).ceil()).sum().alias("optimal")
           ])
           .with_columns(
               pl.col("algorithm").replace_strict(_alg_order_map, default=999).alias("_alg_order")
@@ -247,59 +286,31 @@ def main(argv=None):
     stats.write_csv("agg_stats.csv")
 
 
-
-    # job/machine status
-    job_machine = df.filter(pl.col("last").is_in([1])).filter(pl.col("rmp_opt").is_not_null())
-
-    job_machine = job_machine.with_columns([
-        pl.when(pl.col("rmp_opt") == (pl.col("lb") - 1e-6).ceil())
-          .then(1)
-          .otherwise(0)
-          .alias("hasopt")
-    ])
-        
-    job_machine = (
-        job_machine
-         .group_by(["algorithm", "jobs", "machines"]).agg([
-            (avg_expr("hasopt") * 100).alias("solved"),
-            avg_expr("rmptime").alias("RMP"),
-            avg_expr("cgtime").alias("CG"),
-            pl.len().alias("count"),
-            (avg_expr("has_integer")*100).alias("integral"),
-        ])
-         .with_columns(
-             pl.col("algorithm").replace_strict(_alg_order_map, default=999).alias("_alg_order")
-         )
-         .sort("_alg_order", "jobs", "machines")
-         .drop("_alg_order")
-    )
-
-    # pivot by class and jobs, with columns for each algorithm, values are avg hasopt, runtime_cap, cgtime, has_integer
-    job_machine_pivot = job_machine.pivot(
-        values=["solved", "RMP", "CG", "integral", "count"],
-        index=["jobs", "machines"],
-        on="algorithm"
-    )
-
-    print(job_machine_pivot)
-    job_machine_pivot.write_csv("agg_job_machine.csv")
-
-
     # class/job status
     class_job = df.filter(pl.col("last").is_in([1])).filter(pl.col("rmp_opt").is_not_null())
 
     class_job = class_job.with_columns([
-        pl.when(pl.col("rmp_opt") == (pl.col("lb") - 1e-6).ceil())
+        pl.when(pl.col("rmptime") > 3600)
+          .then(3600)
+          .otherwise(pl.col("rmptime"))
+          .alias("rmptime_cap")
+    ])
+
+
+    class_job = class_job.with_columns([
+        pl.when(pl.col("rmp_opt") <= (pl.col("lb") - 1e-6).ceil())
           .then(1)
           .otherwise(0)
           .alias("hasopt")
     ])
-        
+
     class_job = (
         class_job
          .group_by(["algorithm", "class", "jobs"]).agg([
             (avg_expr("hasopt") * 100).alias("solved"),
-            avg_expr("rmptime").alias("RMP"),
+            ((pl.col("rmp_opt") <= (pl.col("lb") - 1e-6).ceil()) & (pl.col("timeout") == 0)).mean().alias("lr_treated_as_solved"),
+            (avg_expr("timeout")).alias("timeouts"),
+            avg_expr("rmptime_cap").alias("RMP"),
             avg_expr("cgtime").alias("CG"),
             pl.len().alias("count"),
             (avg_expr("has_integer")*100).alias("integral"),
@@ -313,89 +324,13 @@ def main(argv=None):
 
     # pivot by class and jobs, with columns for each algorithm, values are avg hasopt, runtime_cap, cgtime, has_integer
     class_job_pivot = class_job.pivot(
-        values=["solved", "RMP", "CG", "integral", "count"],
+        values=["solved", "timeouts", "lr_treated_as_solved", "RMP", "CG", "integral", "count"],
         index=["class", "jobs"],
         on="algorithm"
     )
 
     print(class_job_pivot)
     class_job_pivot.write_csv("agg_class_job.csv")
-
-
-
-    # class/ratio status
-    class_ratio = df.filter(pl.col("last").is_in([1])).filter(pl.col("rmp_opt").is_not_null())
-
-    class_ratio = class_ratio.with_columns([
-        pl.when(pl.col("rmp_opt") == (pl.col("lb") - 1e-6).ceil())
-          .then(1)
-          .otherwise(0)
-          .alias("hasopt"),
-        (pl.col("jobs").cast(pl.Float64) / pl.col("machines").cast(pl.Float64)).alias("ratio")
-    ])
-        
-    class_ratio = (
-        class_ratio
-         .group_by(["algorithm", "ratio"]).agg([
-            avg_expr("rmptime").alias("RMP"),
-            avg_expr("cgtime").alias("CG"),
-            pl.len().alias("count"),
-            (avg_expr("has_integer")*100).alias("integral"),
-            (100-avg_expr("hasopt") * 100).alias("timeout"),
-        ])
-         .with_columns(
-             pl.col("algorithm").replace_strict(_alg_order_map, default=999).alias("_alg_order")
-         )
-         .sort("_alg_order", "ratio")
-         .drop("_alg_order")
-    )
-
-    # pivot by class and ratio, with columns for each algorithm, values are avg hasopt, runtime_cap, cgtime, has_integer
-    class_ratio_pivot = class_ratio.pivot(
-        values=["RMP", "CG", "integral","timeout","count"],
-        index=["ratio"],
-        on="algorithm"
-    )
-
-    print(class_ratio_pivot)
-    class_ratio_pivot.write_csv("agg_class_ratio.csv")
-
-
-    # class/job/machine status
-    class_job_machine = df.filter(pl.col("last").is_in([1])).filter(pl.col("rmp_opt").is_not_null())
-
-    class_job_machine = class_job_machine.with_columns([
-        pl.when(pl.col("rmp_opt") == (pl.col("lb") - 1e-6).ceil())
-          .then(1)
-          .otherwise(0)
-          .alias("hasopt")
-    ])
-        
-    class_job_machine = (
-        class_job_machine
-         .group_by(["algorithm", "class", "jobs", "machines"]).agg([
-            (avg_expr("hasopt") * 100).alias("solved"),
-            avg_expr("rmptime").alias("RMP"),
-            avg_expr("cgtime").alias("CG"),
-            pl.len().alias("count"),
-            (avg_expr("has_integer")*100).alias("integral"),
-        ])
-         .with_columns(
-             pl.col("algorithm").replace_strict(_alg_order_map, default=999).alias("_alg_order")
-         )
-         .sort("_alg_order", "jobs", "machines")
-         .drop("_alg_order")
-    )
-
-    # pivot by class and jobs, with columns for each algorithm, values are avg hasopt, runtime_cap, cgtime, has_integer
-    class_job_machine_pivot = class_job_machine.pivot(
-        values=["solved", "RMP", "CG", "integral", "count"],
-        index=["class", "jobs", "machines"],
-        on="algorithm"
-    )
-
-    print(class_job_machine_pivot)
-    class_job_machine_pivot.write_csv("agg_class_job_machine.csv")
 
     # try:
     #     import xlsxwriter
