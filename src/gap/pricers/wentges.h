@@ -37,9 +37,12 @@ struct WentgesPrice {
 
     void init_feasible() {
         dual_in = _rmp->getSolution().row_dual;
+        dual_sep = _rmp->getSolution().row_dual;
     }
 
     void update() {
+        dantzig.update();
+
         if (_rmp->getObjectiveValue() + 1e-6 < best_reduced_cost) {
             best_reduced_cost = _rmp->getObjectiveValue();
             dual_in.swap(dual_sep);
