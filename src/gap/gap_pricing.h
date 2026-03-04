@@ -22,12 +22,8 @@ struct GapPricing {
 
         int solution_size = 0;
         solution.resize(_instance->jobs);
-        bool success = SCIPsolveKnapsackExactly(_instance->jobs, _instance->demands[_machine].data(), obj.data(), _instance->capacity[_machine], solution.data(), &solution_size, &opt, scip_tmp);
+        SCIPsolveKnapsackExactly(_instance->jobs, _instance->demands[_machine].data(), obj.data(), _instance->capacity[_machine], solution.data(), &solution_size, &opt, scip_tmp);
         solution.resize(solution_size);
-
-        if (!success) {
-			throw std::runtime_error("Error in SCIP Knapsack");
-   		}
 
         return opt + offset;
     }

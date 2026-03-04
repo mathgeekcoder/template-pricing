@@ -746,8 +746,7 @@ void SCIPsolveKnapsackExactly(
 	/* we can only handle integers */
 	if (capacity >= INT_MAX)
 	{
-		//SCIPdebugMsg(scip, "Capacity is to big, so we cannot handle it here.\n");
-
+		throw std::runtime_error("Error in SCIP Knapsack: Capacity is too big, so we cannot handle it here");
 		*success = false;
 		goto TERMINATE;
 	}
@@ -764,6 +763,7 @@ void SCIPsolveKnapsackExactly(
 	if (intcap < 0 || (intcap > 0 && (((size_t)nmyitems) > (SIZE_MAX / (size_t)intcap / sizeof(double)) || ((size_t)nmyitems) * ((size_t)intcap) * sizeof(double) > ((size_t)INT_MAX)))) /*lint !e571*/
 	{
 		//SCIPdebugMsg(scip, "Too much memory (%lu) would be consumed.\n", (unsigned long)(((size_t)nmyitems) * ((size_t)intcap) * sizeof(*optvalues))); /*lint !e571*/
+		throw std::runtime_error("Error in SCIP Knapsack: Too much memory would be consumed");
 
 		*success = false;
 		goto TERMINATE;
