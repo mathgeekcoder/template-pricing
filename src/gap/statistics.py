@@ -1,62 +1,10 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
-import argparse
 import math
 import sys
 from pathlib import Path
 import polars as pl
-
-COLUMNS = [
-   "instance",
-   "class",
-   "machines",
-   "jobs",
-   "algorithm",
-   "solver",
-   "retention",
-   "replication",
-   "iterations",
-   "lb",
-   "ub",
-   "gap",
-   "obj",
-   "redcost",
-   "basis",
-   "cols",
-   "rmptime",
-   "cgtime",
-   "time",
-   "lpiters",
-   "lpiters_per_second",
-   "lpiters_per_column",
-   "has_integer",
-   "timeout",
-   "last",
-]
-
-def geo_expr(column: str) -> pl.Expr:
-    """
-    Build a Polars expression computing geometric mean of positive values in 'column'.
-    Excludes non-positive entries.
-    """
-    col = pl.col(column)
-    return col.filter(col > 0).log().mean().exp().alias(f"geo_{column}")
-
-def avg_expr(column: str) -> pl.Expr:
-    """
-    Build a Polars expression computing mean of values in 'column'.
-    """
-    return pl.col(column).mean().alias(f"avg_{column}")
-
-def sum_expr(column: str) -> pl.Expr:
-    return pl.col(column).sum().alias(f"sum_{column}")
-
-def std_expr(column: str) -> pl.Expr:
-    """
-    Build a Polars expression computing standard deviation of values in 'column'.
-    """
-    return pl.col(column).std().alias(f"std_{column}")
 
 def gap_expr(column: str) -> pl.Expr:
     """
@@ -70,98 +18,89 @@ def gap_expr(column: str) -> pl.Expr:
           .alias("avg_rel_gap")
     )
 
-def boxplot_expr(column: str) -> pl.Expr:
-    """
-    Build a Polars expression computing boxplot statistics of values in 'column'.
-    """
-    return [
-        pl.col(column).min().alias(f"min_{column}"),
-        pl.col(column).quantile(0.25).alias(f"q1_{column}"),
-        pl.col(column).median().alias(f"median_{column}"),
-        pl.col(column).quantile(0.75).alias(f"q3_{column}"),
-        pl.col(column).max().alias(f"max_{column}")
-    ]
-
-def orderby(column: str) -> pl.Expr:
-    return pl.col(column).mean().alias(f"_order")
-
-def main(argv=None):
-    p = argparse.ArgumentParser(description="Compute aggregated GAP statistics.")
-    p.add_argument("input", type=Path, help="Input CSV file (with header).")
-    args = p.parse_args(argv)
-
-    if not args.input.exists():
-        print(f"Input file not found: {args.input}", file=sys.stderr)
-        return 2
-
-    # Read experiment CSV
+def load_csv(file):
     try:
         df = pl.read_csv(
-            args.input,
+            Path(__file__).parent.parent.parent / "results" / "yagiura" / file,
             infer_schema_length=1000,
             null_values=["", "NA", "NaN", "null", "inf"]
         )
 
     except Exception as e:
         print(f"Failed to read CSV: {e}", file=sys.stderr)
-        return 3
+        sys.exit(3)
 
-    # Read optimal values from ../instances/gap/optimal_gap.csv
-    # assumed columns: instance,rmp_opt,integer_opt
-    try:
-        optimal_df = pl.read_csv(
-            Path(__file__).parent.parent.parent / "results" / "original-optimal.csv",
-            infer_schema_length=1000,
-            null_values=["", "NA", "NaN", "null", "inf"]
-        )
+    return df
 
-        df = df.join(optimal_df, on="instance", how="left")
+def farkas(df):
+    # -1 and 6 correspond initialization (6 being integer feasible LP)
+    # -4 is timeout, which we also want to include in the analysis
+    farkas = df.filter(pl.col("last").is_in([-1, 6, -4]))
 
-    except Exception as e:
-        print(f"Failed to read optimal values CSV: {e}", file=sys.stderr)
-        return 4
+    farkas = (
+        farkas
+          .group_by(["farkas"])
+          .agg([
+              (pl.col("rmptime") * 1000).mean().round(1).alias("RMP (ms)"),
+              (pl.col("cgtime") * 1000).mean().round(1).alias("Pricing (ms)"),
+              pl.col("iterations").mean().round(1).alias("#its"),
+              (gap_expr("obj") * 100).round(1).alias("%gap"),
+              (pl.col("has_integer") * 100).mean().round(1).alias("%integer"),
+              (pl.col("timeout") * 100).mean().round(1).alias(f"%timeout"),
+              pl.len().alias("count"),
 
-    algorithm_order = ["Dantzig", "Wentges", "LT", "MT"]
+          ])
+          .sort(["farkas"])
+    )
+
+    print(farkas)
+    print()
+
+
+if __name__ == "__main__":
+    pl.Config.set_tbl_cell_alignment("RIGHT")  
+    pl.Config.set_tbl_hide_column_data_types(True)
+    pl.Config.set_tbl_hide_dataframe_shape(True)
+    pl.Config.set_tbl_cols(-1)
+
+    # COLUMNS = ["instance", "class", "machines", "jobs", "algorithm", "solver", "retention", "replication", "iterations", "lb", "ub", "gap", "obj", "redcost", "basis", "cols", "rmptime", "cgtime", "time", "lpiters", "lpiters_per_second", "lpiters_per_column", "has_integer", "timeout", "last"]
+    df = load_csv("yagiura-results.csv")
+
+    # Read optimal values
+    optimal_df = load_csv("yagiura-optimal.csv")
+    df = df.join(optimal_df, on="instance", how="left")
+
+    algorithm_order = ["D", "P", "LT", "MT"]
     _alg_order_map = {name: i for i, name in enumerate(algorithm_order)}
 
     # rename algorithm values "LagrangeTemplate" -> "LT", "MipTemplate" -> "MT"
     df = df.with_columns([
         pl.col("algorithm")
+          .str.replace("Dantzig", "D")
+          .str.replace("Wentges", "P")
           .str.replace("LagrangeTemplate", "LT")
           .str.replace("MipTemplate", "MT")
     ])
 
-    # Farkas Initialization (sorted by custom algorithm order)
 
-    # NOTE: for any 'instance', 'algorithm' that is missing 'last' == -1 or 6,
-    farkas = df.filter(pl.col("last").is_in([-1, 6])).filter(pl.col("rmp_opt").is_not_null())
+    # farkas initialization
+    print("Farkas set cover:")
+    init_setcover = load_csv("yagiura-init-setcover.csv")
+    init_setcover = init_setcover.join(optimal_df, on="instance", how="left")
+    farkas(init_setcover)
 
-    farkas = (
-        farkas
-          .group_by(["algorithm"])
-          .agg([
-              avg_expr("rmptime"),
-              avg_expr("cgtime"),
-              avg_expr("iterations"),
-              avg_expr("has_integer"),
-              (pl.col("time") >= 3600).sum().alias(f"timeout"),
-              pl.len().alias("count"),
+    print("Farkas set partition:")
+    init_partition = load_csv("yagiura-init-setpartition.csv")
+    init_partition = init_partition.join(optimal_df, on="instance", how="left")
+    farkas(init_partition)
 
-              # gap relative to optimal integer solution
-              gap_expr("obj"),
-          ])
-          .with_columns(
-              pl.col("algorithm").replace_strict(_alg_order_map, default=999).alias("_alg_order")
-          )
-          .sort(["_alg_order"])
-          .drop("_alg_order")
-    )
 
-    #print(farkas)
+    # solved vs time for figure
+    print("Solved vs time:")
 
     # capture cumulative count of solved vs time for each algorithm,
     # where time is quantized in minutes and cumulative count is number of instances solved within that time
-    solved = df.filter(pl.col("last").is_in([1])).filter(pl.col("rmp_opt").is_not_null())
+    solved = df.filter(pl.col("last") == 1)
 
     solved = solved.with_columns([
         pl.when(pl.col("time") > 21600)
@@ -170,10 +109,7 @@ def main(argv=None):
           .alias("time_cap")
     ])
 
-    # only consider instances solved to optimality (rmp_opt == LB)
-    solved = solved.filter(pl.col("rmp_opt") == (pl.col("lb") - 1e-6).ceil())
-
-    # quantize time to minutes
+    # quantize time to 0.5 minutes
     solved = solved.with_columns([
         ((pl.col("time_cap") // 30) / 2.0 + 1).cast(pl.Float64).alias("time_minutes")
     ])
@@ -201,16 +137,17 @@ def main(argv=None):
 
     # convert cumsum to percentage, i.e., divide by 1735 instances
     solved = solved.with_columns([
-        (pl.col("Dantzig") / 285 * 100).alias("D"),
-        (pl.col("Wentges") / 285 * 100).alias("P"),
-        (pl.col("LT") / 285 * 100).alias("LT"),
-        (pl.col("MT") / 285 * 100).alias("MT"),
+        (pl.col("D") / 285 * 100).round(1).alias("D"),
+        (pl.col("P") / 285 * 100).round(1).alias("P"),
+        (pl.col("LT") / 285 * 100).round(1).alias("LT"),
+        (pl.col("MT") / 285 * 100).round(1).alias("MT"),
     ]).select(["time_minutes", "D", "P", "LT", "MT"])
 
+    #solved.write_csv("agg_solved.csv")
     print(solved)
-    solved.write_csv("agg_solved.csv")
+    print()
 
-
+    print("Aggregate statistics:")
     stats = df.filter(pl.col("last").is_in([1])).filter(pl.col("rmp_opt").is_not_null())
 
     # replace "#NAME?" or "nan" in "gap" column with null, then cast to float
@@ -225,16 +162,16 @@ def main(argv=None):
         stats
           .group_by(["algorithm"])
           .agg([
-              pl.len().alias("count"),
-              (sum_expr("timeout") / 285).alias("timeout"),
-              avg_expr("iterations"),
-              avg_expr("rmptime"),
-              avg_expr("cgtime"),
+              (pl.col("timeout").mean() * 100).round(1).alias("%timeout"),
+              pl.col("iterations").mean().round(0).alias("#its"),
+              pl.col("rmptime").mean().round(1).alias("RMP (s)"),
+              pl.col("cgtime").mean().round(1).alias("Pricing (s)"),
 
-              avg_expr("lpiters_per_column"),
-              (sum_expr("lpiters") / sum_expr("rmptime")).alias("lpss"),
-              (sum_expr("has_integer") / 285).alias("integral"),
-              avg_expr("gap"),
+              pl.col("lpiters_per_column").mean().round(1).alias("pivots/col"),
+              (pl.col("lpiters").sum() / pl.col("rmptime").sum()).round(1).alias("pivots/s"),
+              (pl.col("has_integer").mean() * 100).round(1).alias("%integral"),
+              pl.col("gap").mean().round(1).alias("%gap"),
+              pl.len().alias("count"),
           ])
           .with_columns(
               pl.col("algorithm").replace_strict(_alg_order_map, default=999).alias("_alg_order")
@@ -243,29 +180,21 @@ def main(argv=None):
           .drop(["_alg_order"])
     )
 
+    #stats.write_csv("agg_stats.csv")
     print(stats)
-    stats.write_csv("agg_stats.csv")
+    print()
 
-
+    print("Job/Machine:")
 
     # job/machine status
-    job_machine = df.filter(pl.col("last").is_in([1])).filter(pl.col("rmp_opt").is_not_null())
+    job_machine = df.filter(pl.col("last") == 1)
 
-    job_machine = job_machine.with_columns([
-        pl.when(pl.col("rmp_opt") == (pl.col("lb") - 1e-6).ceil())
-          .then(1)
-          .otherwise(0)
-          .alias("hasopt")
-    ])
-        
     job_machine = (
         job_machine
          .group_by(["algorithm", "jobs", "machines"]).agg([
-            (avg_expr("hasopt") * 100).alias("solved"),
-            avg_expr("rmptime").alias("RMP"),
-            avg_expr("cgtime").alias("CG"),
+            pl.col("rmptime").mean().round(1).alias("RMP"),
+            pl.col("cgtime").mean().round(1).alias("CG"),
             pl.len().alias("count"),
-            (avg_expr("has_integer")*100).alias("integral"),
         ])
          .with_columns(
              pl.col("algorithm").replace_strict(_alg_order_map, default=999).alias("_alg_order")
@@ -276,153 +205,41 @@ def main(argv=None):
 
     # pivot by class and jobs, with columns for each algorithm, values are avg hasopt, runtime_cap, cgtime, has_integer
     job_machine_pivot = job_machine.pivot(
-        values=["solved", "RMP", "CG", "integral", "count"],
+        values=["RMP", "CG", "count"],
         index=["jobs", "machines"],
         on="algorithm"
     )
 
+#    job_machine_pivot.write_csv("agg_job_machine.csv")
     print(job_machine_pivot)
-    job_machine_pivot.write_csv("agg_job_machine.csv")
+    print()
 
 
-    # class/job status
-    class_job = df.filter(pl.col("last").is_in([1])).filter(pl.col("rmp_opt").is_not_null())
-
-    class_job = class_job.with_columns([
-        pl.when(pl.col("rmp_opt") == (pl.col("lb") - 1e-6).ceil())
-          .then(1)
-          .otherwise(0)
-          .alias("hasopt")
-    ])
-        
-    class_job = (
-        class_job
-         .group_by(["algorithm", "class", "jobs"]).agg([
-            (avg_expr("hasopt") * 100).alias("solved"),
-            avg_expr("rmptime").alias("RMP"),
-            avg_expr("cgtime").alias("CG"),
-            pl.len().alias("count"),
-            (avg_expr("has_integer")*100).alias("integral"),
-        ])
-         .with_columns(
-             pl.col("algorithm").replace_strict(_alg_order_map, default=999).alias("_alg_order")
-         )
-         .sort("_alg_order", "class", "jobs")
-         .drop("_alg_order")
-    )
-
-    # pivot by class and jobs, with columns for each algorithm, values are avg hasopt, runtime_cap, cgtime, has_integer
-    class_job_pivot = class_job.pivot(
-        values=["solved", "RMP", "CG", "integral", "count"],
-        index=["class", "jobs"],
-        on="algorithm"
-    )
-
-    print(class_job_pivot)
-    class_job_pivot.write_csv("agg_class_job.csv")
-
-
-
-    # class/ratio status
-    class_ratio = df.filter(pl.col("last").is_in([1])).filter(pl.col("rmp_opt").is_not_null())
-
-    class_ratio = class_ratio.with_columns([
-        pl.when(pl.col("rmp_opt") == (pl.col("lb") - 1e-6).ceil())
-          .then(1)
-          .otherwise(0)
-          .alias("hasopt"),
-        (pl.col("jobs").cast(pl.Float64) / pl.col("machines").cast(pl.Float64)).alias("ratio")
-    ])
-        
-    class_ratio = (
-        class_ratio
-         .group_by(["algorithm", "ratio"]).agg([
-            avg_expr("rmptime").alias("RMP"),
-            avg_expr("cgtime").alias("CG"),
-            pl.len().alias("count"),
-            (avg_expr("has_integer")*100).alias("integral"),
-            (100-avg_expr("hasopt") * 100).alias("timeout"),
-        ])
-         .with_columns(
-             pl.col("algorithm").replace_strict(_alg_order_map, default=999).alias("_alg_order")
-         )
-         .sort("_alg_order", "ratio")
-         .drop("_alg_order")
-    )
-
-    # pivot by class and ratio, with columns for each algorithm, values are avg hasopt, runtime_cap, cgtime, has_integer
-    class_ratio_pivot = class_ratio.pivot(
-        values=["RMP", "CG", "integral","timeout","count"],
-        index=["ratio"],
-        on="algorithm"
-    )
-
-    print(class_ratio_pivot)
-    class_ratio_pivot.write_csv("agg_class_ratio.csv")
-
+    print("All:")
 
     # class/job/machine status
-    class_job_machine = df.filter(pl.col("last").is_in([1])).filter(pl.col("rmp_opt").is_not_null())
+    class_job_machine = df.filter(pl.col("last") == 1)
 
-    class_job_machine = class_job_machine.with_columns([
-        pl.when(pl.col("rmp_opt") == (pl.col("lb") - 1e-6).ceil())
-          .then(1)
-          .otherwise(0)
-          .alias("hasopt")
-    ])
-        
     class_job_machine = (
         class_job_machine
          .group_by(["algorithm", "class", "jobs", "machines"]).agg([
-            (avg_expr("hasopt") * 100).alias("solved"),
-            avg_expr("rmptime").alias("RMP"),
-            avg_expr("cgtime").alias("CG"),
+            pl.col("rmptime").mean().round(1).alias("RMP"),
+            pl.col("cgtime").mean().round(1).alias("CG"),
             pl.len().alias("count"),
-            (avg_expr("has_integer")*100).alias("integral"),
         ])
          .with_columns(
              pl.col("algorithm").replace_strict(_alg_order_map, default=999).alias("_alg_order")
          )
-         .sort("_alg_order", "jobs", "machines")
+         .sort("_alg_order", "class", "jobs", "machines")
          .drop("_alg_order")
     )
 
     # pivot by class and jobs, with columns for each algorithm, values are avg hasopt, runtime_cap, cgtime, has_integer
     class_job_machine_pivot = class_job_machine.pivot(
-        values=["solved", "RMP", "CG", "integral", "count"],
+        values=["RMP", "CG", "count"],
         index=["class", "jobs", "machines"],
         on="algorithm"
     )
 
+    #class_job_machine_pivot.write_csv("agg_class_job_machine.csv")
     print(class_job_machine_pivot)
-    class_job_machine_pivot.write_csv("agg_class_job_machine.csv")
-
-    # try:
-    #     import xlsxwriter
-
-    #     # take all the csvs and write to a single excel file with multiple sheets
-    #     with xlsxwriter.Workbook("agg_statistics.xlsx") as workbook:
-    #         farkas.write_excel(workbook=workbook, worksheet="farkas", autofilter=False, autofit=True)
-    #         column_retention.write_excel(workbook=workbook, worksheet="retention", autofilter=False, autofit=True)
-    #         best.write_excel(workbook=workbook, worksheet="best", autofilter=False, autofit=True)
-    #         degeneracy.write_excel(workbook=workbook, worksheet="degeneracy", autofilter=False, autofit=True)
-    #         instances.write_excel(workbook=workbook, worksheet="instances", autofilter=False, autofit=True)
-    #         solved_vs_time.write_excel(workbook=workbook,
-    #                                    worksheet="solved_vs_time",
-    #                                    autofilter=False,
-    #                                    autofit=True)
-    #         violin_data.write_excel(workbook=workbook, worksheet="violin_data", autofilter=False, autofit=True)
-
-    # except:
-    #     print("xlsxwriter not available, skipping Excel output")
-    #     farkas.write_csv("agg_farkas.csv")
-    #     column_retention.write_csv("agg_retention.csv")
-    #     best.write_csv("agg_best.csv")
-    #     degeneracy.write_csv("agg_degeneracy.csv")
-    #     instances.write_csv("agg_instances.csv")
-
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
