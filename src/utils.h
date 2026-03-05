@@ -81,106 +81,6 @@ static uint32_t baseTenDigits(uint64_t x) {
     }
 }
 
-// Recursive variadic template to bind values to the statement.
-template <class T>
-void _csv_index(std::ostringstream& ss, const T& a) {
-    ss << a;
-}
-
-template <class T, class ...Args>
-void _csv_index(std::ostringstream& ss, const T& a, const Args&... args) {
-    ss << a << ",";
-    _csv_index(ss, args...);
-}
-
-template <class T, class ...Args> std::string csv_join(const T& a, const Args&... args) {
-	std::ostringstream ss;
-    _csv_index(ss, a, args...);
-	return ss.str();
-}
-
-// faster join for strings
-inline std::string join(const std::vector<std::string>& v, const std::string& delim) {
-    if (v.empty())
-        return std::string();
-
-    size_t size = delim.size() * (v.size() - 1);
-    for (int i = 0; i < v.size(); ++i) {
-		size += v[i].size();
-    }
-
-    std::string s;
-    s.reserve(size);
-    s += v[0];
-
-    for (int i = 1; i < v.size(); ++i) {
-        s += delim;
-        s += v[i];
-    }
-    return s;
-}
-
-// faster join for integers (stringstream isn't very fast)
-inline std::string join(const std::vector<int>& v, const std::string& delim) {
-    if (v.empty())
-        return std::string();
-
-    size_t size = delim.size() * (v.size() - 1);
-    for (int i = 0; i < v.size(); ++i) {
-        size += baseTenDigits(abs(v[i])) + (v[i] < 0); // number of digits + possible minus sign
-    }
-
-    std::string s;
-    s.reserve(size);
-    s += std::to_string(v[0]);
-
-    for (int i = 1; i < v.size(); ++i) {
-        s += delim;
-        s += std::to_string(v[i]);
-    }
-    return s;
-}
-
-inline int64_t calc_gcd(int64_t a, int64_t b) {
-    int64_t h;
-    if (a < 0) a = -a;
-    if (b < 0) b = -b;
-
-    if (a == 0) return b;
-    if (b == 0) return a;
-
-    do {
-        h = a % b;
-        a = b;
-        b = h;
-    } while (b != 0);
-
-    return a;
-}
-
-inline std::string join(const std::vector<double>& v, const std::string& delim) {
-    if (v.empty())
-        return std::string();
-
-    std::string s;
-    s += std::to_string(v[0]);
-
-    for (int i = 1; i < v.size(); ++i) {
-        s += delim;
-        s += std::to_string(v[i]);
-    }
-    return s;
-}
-
-template <typename _Pr>
-static std::vector<uint32_t> sorted_index(size_t size, _Pr _Pred) {
-	std::vector<uint32_t> index(size);
-	std::iota(index.begin(), index.end(), 0);
-	std::stable_sort(index.begin(), index.end(), _Pred);
-	return index;
-}
-
-
 class ColumnAlignOutput {
    std::vector<int> _width;
    std::vector<int> _precision;
@@ -253,20 +153,6 @@ public:
 		return _name;
 	}
 };
-
-template <class T>
-inline void erase_selected(std::vector<T>& v, const std::vector<int>& selection)
-{
-    v.resize(std::distance(
-        v.begin(),
-        std::stable_partition(v.begin(), v.end(),
-            [&selection, &v](const T& item) {
-                return !std::binary_search(
-                    selection.begin(),
-                    selection.end(),
-                    static_cast<int>(static_cast<const T*>(&item) - &v[0]));
-            })));
-}
 
 static bool endsWith(const std::string& str, const std::string&& suffix)
 {

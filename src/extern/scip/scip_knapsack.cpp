@@ -1,8 +1,8 @@
 #include <vector>
 #include "highs/util/HighsIntegers.h"
-#include "utils.h"
 #include "scip_knapsack.h"
 #include <climits>
+#include <stdexcept>
 
 /* swapping two variables */
 #define SORTTPL_SWAP(T,x,y) \
@@ -583,7 +583,7 @@ void SCIPsolveKnapsackExactly(
 		/* determine greatest common divisor */
 		gcd = myweights[nmyitems - 1];
 		for (j = nmyitems - 2; j >= 0 && gcd >= 2; --j)
-			gcd = calc_gcd(gcd, myweights[j]);
+			gcd = HighsIntegers::gcd(gcd, myweights[j]);
 
 		/* divide by greatest common divisor */
 		if (gcd > 1)
@@ -639,9 +639,6 @@ void SCIPsolveKnapsackExactly(
 	{
 		double addval = 0.0;
 		//SCIPdebugMsg(scip, "All weights are equal, so take the best.\n");
-		std::cout << "Unsupported operation" << std::endl;
-		exit(0);
-
 		SCIPsortDownRealIntLong(myprofits.data(), myitems.data(), myweights.data(), nmyitems);
 
 		/* update solution information */
@@ -1003,7 +1000,7 @@ bool SCIPsolveKnapsackExactly(
 		/* determine greatest common divisor */
 		gcd = myweights[nmyitems - 1];
 		for (j = nmyitems - 2; j >= 0 && gcd >= 2; --j)
-			gcd = calc_gcd(gcd, myweights[j]);
+			gcd = HighsIntegers::gcd(gcd, myweights[j]);
 
 		/* divide by greatest common divisor */
 		if (gcd > 1) {
