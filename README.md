@@ -2,9 +2,16 @@
 
 This repository contains code used in the journal publication:
 
-"Accelerating Column Generation in Highly Degenerate Integer Programming Problems with Template Pricing"
-
-If you use this code in your research, please cite the paper above.
+### [PLACEHOLDER UNTIL PUBLICATION]
+```bibtex
+@article{template_pricing:2026,
+  title = {Accelerating Column Generation in Highly Degenerate Integer Programming Problems with Template Pricing},
+  author = {Marshall, L. and Shah, P. and Dey, S.},
+  journal = {Journal Name},
+  year = {2026},
+  note = {Code: https://github.com/mathgeekcoder/template-pricing}
+}
+```
 
 ## Features
 
@@ -129,14 +136,14 @@ Notes for sweep mode:
 # Basic run with defaults for method/init
 ./colgen_pricing data/instance.json
 
-# Use lagrangian-relaxation pricer, 4 threads
+# Use lagrangian-relaxation, 4 threads
 ./colgen_pricing data -m lr -t 4 
 
 # Provide custom quadratic retention function
 ./colgen_pricing data/instance.json -m lt --func 0 0 10
 
 # Parameter sweep (both sweep flags required)
-./colgen_pricing data/ --age_sweep 1 10 1 --multiplier_sweep 1.0 3.0 0.5
+./colgen_pricing data/ --age_sweep 1 10 1 --multiplier_sweep 1 3 0.5
 ```
 
 ## Experiments
@@ -208,20 +215,6 @@ python merge.py *.csv -x -o isa-init-setcover.csv
 ./colgen_pricing instances/ISA/extended  -m lt --time_limit 21600
 ./colgen_pricing instances/ISA/extended  -m lr --time_limit 21600
 python merge.py *.csv -x -o isa-results.csv
-```
-
-## Suggested citation
-
-If a formal BibTeX entry is not yet available, you can use the following placeholder and replace the authors, year and journal/volume/page with the actual values:
-
-```bibtex
-@article{template_pricing:XXXX,
-  title = {Accelerating Column Generation in Highly Degenerate Integer Programming Problems with Template Pricing},
-  author = {Author, A. and Author, B.},
-  journal = {Journal Name},
-  year = {XXXX},
-  note = {Code: https://github.com/mathgeekcoder/template-pricing}
-}
 ```
 
 ## License
