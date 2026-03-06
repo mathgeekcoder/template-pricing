@@ -42,7 +42,7 @@ def load_csv(file):
     return df
 
 def sort_by_algorithm(df):
-    algorithm_order = ["D", "P", "LT", "MT"]
+    algorithm_order = ["D", "P", "LT", "MT", "LR"]
     _alg_order_map = {name: i for i, name in enumerate(algorithm_order)}
 
     return (
@@ -145,7 +145,7 @@ if __name__ == "__main__":
 
     # quantize time to 0.5 minutes
     solved = solved.with_columns([
-        ((pl.col("time_cap") // 30) / 2.0 + 1).cast(pl.Float64).alias("time_minutes")
+        ((pl.col("time_cap") // 30) / 2.0).cast(pl.Float64).alias("time_minutes")
     ])
 
     # create a complete range of time_minutes from 0 to 360 in 0.5 increments
