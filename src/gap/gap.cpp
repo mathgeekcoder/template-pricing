@@ -443,6 +443,28 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
             }
         }
 
+		// Disabled for now, typically we don't have many iterations in phase I. Can re-enable if we see performance issues.
+        //// remove old columns if we've got too many, but only if we have made progress
+        //const uint32_t MAX_COLS = dummy_cols + params.max_col_multiplier * rmp->getNumRow();
+
+        //if (num_col > MAX_COLS && iteration_count > params.age_limit) {
+        //    const uint32_t age_limit = iteration_count - params.age_limit;
+        //    std::vector<int> indices_to_remove;
+
+        //    for (uint32_t i = dummy_cols; i < num_col; ++i) {
+        //        if (column_management._age[i - dummy_cols] < age_limit) {
+        //            indices_to_remove.emplace_back(i);
+        //        }
+        //    }
+
+        //    // remove the columns from model and from _age, reverse order to preserve correct index
+        //    for (auto it = indices_to_remove.crbegin(); it != indices_to_remove.crend(); ++it) {
+        //        column_management._age.erase(column_management._age.begin() + *it - dummy_cols);
+        //        costs.erase(costs.begin() + *it - dummy_cols);
+        //    }
+        //    rmp->deleteCols(static_cast<int>(indices_to_remove.size()), indices_to_remove.data());
+        //}
+
         cg_time.start();
         if (has_dual_ray) {
             pricer_farkas.update(rmp.get());
