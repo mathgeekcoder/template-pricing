@@ -1,61 +1,6 @@
 #!/usr/bin/env python
-from __future__ import annotations
-
-import sys
-from pathlib import Path
 import polars as pl
-
-def load_csv(file):
-    try:
-        df = pl.read_csv(Path(__file__).parent.parent.parent / "results" /
-                        "isa" / file,
-                        infer_schema_length=1000,
-                        null_values=["", "NA", "NaN", "null", "inf"])
-
-        # rename algorithm values "LagrangeTemplate" -> "LT", "MipTemplate" -> "MT"
-        if "algorithm" in df.columns:
-            df = (
-                df.with_columns([
-                    pl.col("algorithm")
-                        .str.replace("Dantzig", "D")
-                        .str.replace("Wentges", "P")
-                        .str.replace("LagrangeTemplate", "LT")
-                        .str.replace("MipTemplate", "MT")
-                        .str.replace("lr", "LR")
-                ])
-            )
-
-        if "gap" in df.columns:
-            df = df.with_columns([
-                    pl.col("gap").cast(pl.String)
-                      .str.replace_all(r"#NAME\?|nan|^$", "")
-                      .alias("gap")
-                ]).with_columns([
-                    pl.when(pl.col("gap") == "")
-                        .then(None)
-                        .otherwise(pl.col("gap").cast(pl.Float64, strict=False)
-                    ).alias("gap")
-                ])
-
-    except Exception as e:
-        print(f"Failed to read CSV: {e}", file=sys.stderr)
-        sys.exit(3)
-
-    return df
-
-def sort_by_algorithm(df):
-    algorithm_order = ["D", "P", "LT", "MT", "LR"]
-    _alg_order_map = {name: i for i, name in enumerate(algorithm_order)}
-
-    return (
-        df.with_columns(
-            pl.col("algorithm").replace_strict(
-                _alg_order_map, default=999).alias("_alg_order")
-        )
-        .sort(["_alg_order"])
-        .drop("_alg_order")
-    )
-
+from utils import load_results_csv, sort_by_algorithm
 
 def farkas(df):
     # -1 and 6 correspond initialization (6 being integer feasible LP)
@@ -92,10 +37,10 @@ if __name__ == "__main__":
     pl.Config.set_tbl_hide_dataframe_shape(True)
     pl.Config.set_tbl_cols(-1)
 
-    df = load_csv("isa-results.csv")
+    df = load_results_csv("isa", "isa-results.csv")
 
     # Read optimal values
-    optimal_df = load_csv("isa-optimal.csv")
+    optimal_df = load_results_csv("isa", "isa-optimal.csv")
     df = df.join(optimal_df, on="instance", how="left")
 
     # Consider not-solved if:
@@ -108,7 +53,7 @@ if __name__ == "__main__":
 
     # farkas initialization
     print("Farkas set cover:")
-    init_setcover = load_csv("isa-init-setcover.csv")
+    init_setcover = load_results_csv("isa", "isa-init-setcover.csv")
     init_setcover = init_setcover.join(optimal_df, on="instance", how="left")
     farkas(init_setcover)
 

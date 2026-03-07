@@ -1,33 +1,5 @@
-import sys
-from pathlib import Path
+from utils import load_results_csv, extract_parameters
 import polars as pl
-
-def load_sweep_csv(file: str) -> pl.DataFrame:
-    # Read experiment CSV
-    try:
-        df = pl.read_csv(Path(__file__).parent.parent.parent / "results" /
-                        "parameter-sweeps" / file,
-                        infer_schema_length=1000,
-                        null_values=["", "NA", "NaN", "null", "inf"])
-
-    except Exception as e:
-        print(f"Failed to read CSV: {e}", file=sys.stderr)
-        exit(3)
-
-    # extract "age_limit" and "max_col_multiplier" json fields from params column
-    df = df.with_columns([
-        pl.col("params").str.extract(r".*age_limit:\s*(\d+)").cast(pl.Int64).alias("age_limit"),
-        pl.col("params").str.extract(r".*random_seed:\s*(\d+)").cast(pl.Int64).alias("random_seed"),
-        pl.col("params").str.extract(r".*max_col_multiplier:\s*(\d+)").cast(pl.Float64).alias("max_col_multiplier")
-    ])
-
-    df = df.with_columns([
-        (pl.col("jobs").cast(pl.Int64) // pl.col("machines").cast(pl.Int64)).alias("job_machine_ratio")
-    ])
-
-    return (
-        df.filter(pl.col("last") == 1)
-    )
 
 def render_cli_heatmap(pivot: pl.DataFrame) -> None:
     """
@@ -66,7 +38,8 @@ if __name__ == "__main__":
     pl.Config.set_tbl_hide_column_data_types(True)
     pl.Config.set_tbl_hide_dataframe_shape(True)
 
-    instances = load_sweep_csv("c10400-age-vs-activation-sweep.csv")
+    instances = load_results_csv("parameter-sweeps", "c10400-age-vs-activation-sweep.csv")
+    instances = extract_parameters(instances).filter(pl.col("last") == 1)
 
     # too much data to plot all, so group age into buckets of size 20 and max_col_multiplier into buckets of size 2
     instances = instances.with_columns([
