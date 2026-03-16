@@ -40,13 +40,21 @@ def pivot_times(df, group_by = ["class", "jobs", "machines"]):
         df.group_by(["algorithm"] + group_by).agg([
             pl.col("rmptime").mean().round(1).alias("RMP"),
             pl.col("cgtime").mean().round(1).alias("CG"),
+            pl.col("time").log().mean().exp().alias("time"),
             pl.len().alias("count"),
         ])
         .sort(group_by)
     )
 
+    # compute best time per instance, and produce multipliers for each algorithm relative to the best time
+    df = df.with_columns([
+        pl.col("time").min().over(group_by).alias("best_time"),
+    ]).with_columns([(pl.col("time") /
+                      pl.col("best_time")).round(0).alias("time_multiplier")])
+
+
     pivot = df.pivot(
-        values=["RMP", "CG", "count"],
+        values=["RMP", "CG", "time_multiplier", "count"],
         index=group_by,
         on="algorithm"
     )

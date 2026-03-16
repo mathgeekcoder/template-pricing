@@ -131,6 +131,34 @@ if __name__ == "__main__":
     print()
 
 
+    print("Filtered Aggregate statistics:")
+    stats = df.filter(pl.col("last") == 1)
+
+    ## only consider instances solved by all algorithms, to compare solution quality and runtime on the same set of instances
+    solved_instances = stats.group_by('instance').agg(pl.col("notsolved").sum().alias("notsolved")).filter(pl.col("notsolved") == 0).select("instance").unique()['instance'].to_list()
+    stats = stats.filter(pl.col("instance").is_in(solved_instances))
+
+    stats = sort_by_algorithm(
+        stats
+          .group_by(["algorithm"])
+          .agg([
+              (100 - pl.col("notsolved").mean() * 100).round(1).alias("% solved"),
+              pl.col("iterations").mean().round(0).alias("#its"),
+              pl.col("rmptime").mean().round(1).alias("RMP (s)"),
+              pl.col("cgtime").mean().round(1).alias("Pricing (s)"),
+
+              pl.col("lpiters_per_column").mean().round(1).alias("pivots/col"),
+              (pl.col("lpiters").sum() / pl.col("rmptime").sum()).round(1).alias("pivots/s"),
+              (pl.col("has_integer").mean() * 100).round(1).alias("%integral"),
+              pl.col("gap").mean().round(1).alias("%gap"),
+              pl.len().alias("count")
+          ])
+    )
+
+    print(stats)
+    print()
+
+
     # class/job statistics
     print("Class/Job:")
     class_job = df.filter(pl.col("last") == 1)
