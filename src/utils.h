@@ -263,6 +263,37 @@ T sum(Iterator begin, Iterator end, T init, Lookup& op) {
     });
 }
 
+// deletes all indices from container, preserving order of remaining elements, modifies container in-place
+// assumes indices_to_remove is sorted in ascending order and contains valid indices
+template <typename T>
+void delete_by_index(std::vector<T>& container, const std::vector<int>& indices_to_remove)
+{
+    size_t num_items = container.size();
+
+    if (indices_to_remove.size() != 0) {
+        size_t write_idx = 0;
+        size_t read_idx = 0;
+
+        for (size_t delete_idx : indices_to_remove) {
+            size_t count = delete_idx - read_idx;
+
+            if (count > 0 && write_idx != read_idx) {
+                std::copy(container.begin() + read_idx, container.begin() + delete_idx, container.begin() + write_idx);
+            }
+
+            write_idx += count;
+            read_idx = delete_idx + 1;
+        }
+
+        if (read_idx < num_items && write_idx != read_idx) {
+            std::copy(container.begin() + read_idx, container.end(), container.begin() + write_idx);
+        }
+
+        write_idx += num_items - read_idx;
+        container.resize(write_idx);
+    }
+}
+
 
 // Support for Ctrl-C signal handling
 struct HandleCtrlC {

@@ -4,7 +4,7 @@
 #include <format>
 
 struct Parameters {
-	double time_limit = 21600;  // 6 hours
+	double time_limit = -1;  // no time limit
 	double gap = 0.00001;	 // 0.001% gap
 	double max_col_multiplier = 1;
 	double age_limit = 1;

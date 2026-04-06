@@ -10,121 +10,8 @@
 #include <filesystem>
 #include "utils.h"
 
-// provide additional status information
-enum class LogStatus {
-    Iteration = 0,
-	ValidTermination = 1,
-    Gap = 2,
-    Optimal = 3,
-    Feasible = -1,
-    TimeLimit = -4,
-    UserInterrupt = -5,
-    CompactOptimal = 6,
-	FatalError = -7
-};
-
-// Helper to apply RmpSolver template parameter to a list of pricer templates
-template <typename RmpSolver, template<typename> class... Pricers>
-using RmpTuple = std::tuple<Pricers<RmpSolver>...>;
-
-// Pricer types
 template <typename RmpSolver>
-using PricerTypes = RmpTuple<RmpSolver, 
-    DantzigPrice, 
-    WentgesPrice, 
-    TemplatePrice, 
-    LagrangeTemplatePrice
->;
-
-// Farkas types
-template <typename RmpSolver>
-using FarkasPricerTypes = RmpTuple<RmpSolver, 
-    DantzigFarkas, 
-    TemplateFarkas, 
-    LagrangeTemplateFarkas
->;
-
-
-template class GapSolver<Highs, DantzigFarkas, DantzigPrice>;
-template class GapSolver<Highs, DantzigFarkas, WentgesPrice>;
-template class GapSolver<Highs, DantzigFarkas, TemplatePrice>;
-template class GapSolver<Highs, DantzigFarkas, LagrangeTemplatePrice>;
-
-template class GapSolver<Highs, TemplateFarkas, DantzigPrice>;
-template class GapSolver<Highs, TemplateFarkas, WentgesPrice>;
-template class GapSolver<Highs, TemplateFarkas, TemplatePrice>;
-template class GapSolver<Highs, TemplateFarkas, LagrangeTemplatePrice>;
-
-template class GapSolver<Highs, LagrangeTemplateFarkas, DantzigPrice>;
-template class GapSolver<Highs, LagrangeTemplateFarkas, WentgesPrice>;
-template class GapSolver<Highs, LagrangeTemplateFarkas, TemplatePrice>;
-template class GapSolver<Highs, LagrangeTemplateFarkas, LagrangeTemplatePrice>;
-
-#ifdef SUPPORT_GUROBI
-
-template class GapSolver<GurobiHighs, DantzigFarkas, DantzigPrice>;
-template class GapSolver<GurobiHighs, DantzigFarkas, WentgesPrice>;
-template class GapSolver<GurobiHighs, DantzigFarkas, TemplatePrice>;
-template class GapSolver<GurobiHighs, DantzigFarkas, LagrangeTemplatePrice>;
-
-template class GapSolver<GurobiHighs, TemplateFarkas, DantzigPrice>;
-template class GapSolver<GurobiHighs, TemplateFarkas, WentgesPrice>;
-template class GapSolver<GurobiHighs, TemplateFarkas, TemplatePrice>;
-template class GapSolver<GurobiHighs, TemplateFarkas, LagrangeTemplatePrice>;
-
-template class GapSolver<GurobiHighs, LagrangeTemplateFarkas, DantzigPrice>;
-template class GapSolver<GurobiHighs, LagrangeTemplateFarkas, WentgesPrice>;
-template class GapSolver<GurobiHighs, LagrangeTemplateFarkas, TemplatePrice>;
-template class GapSolver<GurobiHighs, LagrangeTemplateFarkas, LagrangeTemplatePrice>;
-
-#endif
-
-
-template <typename RmpSolver>
-void AgeColumnManagement<RmpSolver>::reduce(uint32_t iteration_count) {
-    // "age" the columns, i.e., set the current basis to the current iteration
-    const auto& solution = _rmp->getSolution();
-    const HighsInt* basis = _rmp->getBasicVariablesArray();
-    const uint32_t num_col = _rmp->getNumCol();
-    uint32_t basis_size = 0;
-    _age.resize(num_col, iteration_count - 1);
-
-    for (uint32_t i = 0; i < _rmp->getNumRow(); ++i) {
-        uint32_t idx = basis[i];
-
-        // include all basis columns, even if they have zero value
-        // this helps reduce number of simplex pivots
-        if (idx < num_col) {
-            bool non_zero = solution.col_value[idx] > 1e-6;
-            _age[idx] = iteration_count + non_zero;
-            basis_size += non_zero;
-        }
-    }
-
-    // remove old columns if we've got too many, but only if we have made progress
-    const uint32_t MAX_COLS = _params->max_col_multiplier * _rmp->getNumRow();
-
-    if (num_col > MAX_COLS && iteration_count > _params->age_limit) {
-		const uint32_t age_limit = iteration_count - _params->age_limit;
-        std::vector<int> indices_to_remove;
-
-		for (uint32_t i = 0; i < num_col; ++i) {
-            if (_age[i] < age_limit) {
-                indices_to_remove.emplace_back(i);
-            }
-		}
-
-        // remove the columns from model and from _age, reverse order to preserve correct index
-		for (auto it = indices_to_remove.crbegin(); it != indices_to_remove.crend(); ++it) {
-			_age.erase(_age.begin() + *it);
-		}
-        _rmp->deleteCols(static_cast<int>(indices_to_remove.size()), indices_to_remove.data());
-        //printf("  Reducing columns from %d -> %d [%d] (basis %d), iteration %d\n", num_col, num_col-indices_to_remove.size(), indices_to_remove.size(), basis_size, iteration_count);
-    }
-}
-
-template <typename RmpSolver, template<typename> class FarkasType, template<typename> class PricerType>
-void GapSolver<RmpSolver, FarkasType, PricerType>::presolve() {
+void GapSolver<RmpSolver>::presolve() {
     // solve LP for template pricing
     _LB = lp.solve();
     lp_iteration_count = lp.iterations;
@@ -142,15 +29,19 @@ void GapSolver<RmpSolver, FarkasType, PricerType>::presolve() {
     }
 }
 
-template <typename RmpSolver, template<typename> class FarkasType, template<typename> class PricerType>
-int GapSolver<RmpSolver, FarkasType, PricerType>::solve() {
-    PricerType<RmpSolver> pricer;
-    FarkasType<RmpSolver> pricer_farkas;
-
+template <typename RmpSolver>
+int GapSolver<RmpSolver>::solve() {
     std::string params_json = params.to_json();
     highs::parallel::initialize_scheduler(1);
     total_time.start();
     tbl.write_header();
+
+    HandleCtrlC ctrl_c_handler([&]() {
+        if (should_stop) exit(-1);  // force stop
+
+        std::cout << std::format("{} {}: Ctrl-C pressed, stopping...\n", instance.name, _pricer_name);
+        should_stop = true;
+    });
 
     presolve();
 
@@ -158,26 +49,20 @@ int GapSolver<RmpSolver, FarkasType, PricerType>::solve() {
         tbl.output(iteration_count, _LB, _UB, "-", "-", "-", "-", "-", total_time.TotalSeconds(), lp_iteration_count, "-");
         std::cout << std::format("Compact solution is integer optimal.");
 
-        // final entry
-        csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, pricer_farkas.name, params.replication, iteration_count,
-            _LB, _UB, 0, _LB, 0, 0, 0, rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(),
-            lp_iteration_count, "", "", 1, 0, params_json, (int)LogStatus::CompactOptimal);
-
-        // final entry
-        csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, pricer_farkas.name, params.replication, iteration_count,
-            _LB, _UB, 0, _LB, 0, 0, 0, rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(),
-            lp_iteration_count, "", "", 1, 0, params_json, (int)LogStatus::ValidTermination);
-
+		write_log(LogStatus::CompactOptimal, 0, _LB, 0, instance.machines);
+        write_log(LogStatus::ValidTermination, 0, _LB, 0, instance.machines);
         return 0;
 	}
 
-    HandleCtrlC ctrl_c_handler([&]() { 
-		if (should_stop) exit(-1);  // force stop
+	// convert pricing variants to concrete types and call solve_impl
+    return std::visit([&](auto& farkas_pricer, auto& pricer) -> int {
+        return solve_impl(farkas_pricer, pricer);
+    }, _farkas, _pricer);
+}
 
-		std::cout << std::format("{} {}: Ctrl-C pressed, stopping...\n", instance.name, pricer.name);
-        should_stop = true; 
-    });
-
+template <typename RmpSolver>
+template <typename FarkasType, typename PricerType>
+int GapSolver<RmpSolver>::solve_impl(FarkasType& farkas_pricer, PricerType& pricer) {
     rmp.reset(new RmpSolver);
     rmp->setOptionValue("output_flag", false);
     rmp->setOptionValue(kPresolveString, "off");
@@ -195,24 +80,22 @@ int GapSolver<RmpSolver, FarkasType, PricerType>::solve() {
 
     // initialize pricing
     pricing.init(instance);
-    pricer_farkas.init(&_executor, pricer, pricing, lp);
+    farkas_pricer.init(&_executor, pricer, pricing, lp);
 
     double optimal_pricing = 0.0;
 	int added_columns = 1; // initialize to 1 to avoid NaN in first iteration
     column_management.init(rmp.get(), &instance, params);
 
-    if (!restoreFeasibility(pricer_farkas)) {
+    if (!restoreFeasibility(farkas_pricer)) {
 		bool time_limit_reached = params.time_limit > 0 && total_time.TotalSeconds() > params.time_limit;
 
-        csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, pricer_farkas.name, params.replication, iteration_count,
-            _LB, _UB, "", "", "", "", rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(),
-            lp_iteration_count, "", "", 0, int(time_limit_reached), params_json, (int)(time_limit_reached ? LogStatus::TimeLimit : LogStatus::UserInterrupt));
-
         if (time_limit_reached) {
-            csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, pricer_farkas.name, params.replication, iteration_count,
-                _LB, _UB, "", "", "", "", rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(),
-                lp_iteration_count, "", "", 0, int(time_limit_reached), params_json, (int)(LogStatus::ValidTermination));
+            write_log(LogStatus::TimeLimit, 0, _LB, 0, instance.machines);
+            write_log(LogStatus::ValidTermination, 0, _LB, 0, instance.machines);
         }
+        else {
+            write_log(LogStatus::UserInterrupt, 0, _LB, 0, instance.machines);
+		}
 
         std::cout << std::format("\n"
             "Inst : {}\n"
@@ -222,7 +105,7 @@ int GapSolver<RmpSolver, FarkasType, PricerType>::solve() {
             "Total: {:.3f} s\n"
             "#Cols: {}\n"
             "Pvt/s: {:.2f}\n",
-            instance.name, pricer.name, rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), rmp->getNumCol(), lp_iteration_count / rmp_time.TotalSeconds());
+            instance.name, _pricer_name, rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), rmp->getNumCol(), lp_iteration_count / rmp_time.TotalSeconds());
 
         return 0;
     }
@@ -231,9 +114,7 @@ int GapSolver<RmpSolver, FarkasType, PricerType>::solve() {
     double _rmpLB = rmp->getObjectiveValue();
 
     tbl.output(iteration_count, _LB, _UB, "-", _rmpLB, "-", basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
-    csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, pricer_farkas.name, params.replication, iteration_count,
-        _LB, _UB, "", _rmpLB, "", basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), 
-        lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), lp_iteration_count / static_cast<double>(rmp->getNumCol()), int(basis_size == instance.machines), int(false), params_json, (int)LogStatus::Feasible);
+	write_log(LogStatus::Feasible, std::nullopt, _rmpLB, std::nullopt, basis_size, lp_iteration_count / rmp_time.TotalSeconds(), lp_iteration_count / static_cast<double>(rmp->getNumCol()));
 
     // primal simplex for warm-start "add columns"
     pricer.init_feasible();
@@ -254,7 +135,7 @@ rmp_time.start();
 rmp_time.pause();
 
             if (modelStatus != HighsModelStatus::kOptimal && modelStatus != HighsModelStatus::kTimeLimit) {
-                std::cout << std::format("{} {}: Error - {}\n", instance.name, pricer.name, (int)rmp->getModelStatus());
+                std::cout << std::format("{} {}: Error - {}\n", instance.name, _pricer_name, (int)rmp->getModelStatus());
                 return -1;
             }
             else if (modelStatus == HighsModelStatus::kTimeLimit) {
@@ -293,9 +174,7 @@ cg_time.pause();
             }
 
             // logging
-            csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, pricer_farkas.name, params.replication, iteration_count,
-                _LB, _UB, gap * 100, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), 
-                lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), lp_iteration_per_column, int(basis_size==instance.machines), int(false), "", (int)LogStatus::Iteration);
+            write_log(LogStatus::Iteration, gap * 100, _rmpLB, optimal_pricing, basis_size, lp_iteration_count / rmp_time.TotalSeconds(), lp_iteration_per_column);
 
             if (iteration_count % ITERATION_OUTPUT == 0 && total_time.TotalSeconds() - previous_logging_time > ITERATION_TIME) {
                 tbl.output(iteration_count, _LB, _UB, gap * 100, _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), total_time.TotalSeconds(), lp_iteration_count, fractional_count);
@@ -324,15 +203,11 @@ cg_time.pause();
     else if (should_stop)
 		last_status = LogStatus::UserInterrupt;
 
-    csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, pricer_farkas.name, params.replication, iteration_count,
-        _LB, _UB, std::abs(gap*100), _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(),
-        lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), avg_pivots_per_column, int(!std::isnan(gap)), int((params.time_limit > 0 && total_time.TotalSeconds() > params.time_limit)), params_json, (int)last_status);
+	write_log(last_status, std::abs(gap * 100), _rmpLB, optimal_pricing, basis_size, lp_iteration_count / rmp_time.TotalSeconds(), avg_pivots_per_column);
 
 	// final entry only if not user interrupted
     if (!should_stop) {
-        csv_writer.append_row(instance.name, instance.name[0], instance.machines, instance.jobs, pricer.name, params.solver, pricer_farkas.name, params.replication, iteration_count,
-            _LB, _UB, std::abs(gap * 100), _rmpLB, optimal_pricing, basis_size, rmp->getNumCol(), rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(),
-            lp_iteration_count, lp_iteration_count / rmp_time.TotalSeconds(), avg_pivots_per_column, int(!std::isnan(gap)), int((params.time_limit > 0 && total_time.TotalSeconds() > params.time_limit)), params_json, (int)LogStatus::ValidTermination);
+        write_log(LogStatus::ValidTermination, std::abs(gap * 100), _rmpLB, optimal_pricing, basis_size, lp_iteration_count / rmp_time.TotalSeconds(), avg_pivots_per_column);
     }
 
     std::cout << std::format("\n"
@@ -344,13 +219,14 @@ cg_time.pause();
 		"#Cols: {}\n"  
         "Gap  : {:.2f}% \n"
         "Pvt/s: {:.2f}\n", 
-        instance.name, pricer.name, rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), rmp->getNumCol(), gap, lp_iteration_count / rmp_time.TotalSeconds());
+        instance.name, _pricer_name, rmp_time.TotalSeconds(), cg_time.TotalSeconds(), total_time.TotalSeconds(), rmp->getNumCol(), gap, lp_iteration_count / rmp_time.TotalSeconds());
 
     return 0;
 }
 
-template <typename RmpSolver, template<typename> class FarkasType, template<typename> class PricerType>
-bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType<RmpSolver>& pricer_farkas) {
+template <typename RmpSolver>
+template <typename FarkasType>
+bool GapSolver<RmpSolver>::restoreFeasibility(FarkasType& farkas_pricer) {
     bool has_dual_ray = false;
     int dummy_cols = 2*instance.jobs;
 
@@ -370,11 +246,10 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
 
     rmp->addCols(instance.jobs, ones.data(), zeros.data(), upper.data(), index.size(), start.data(), index.data(), ones.data());
     rmp->addCols(instance.jobs, ones.data(), zeros.data(), upper.data(), index.size(), start.data(), index.data(), minus.data());
-    //rmp->setOptionValue("simplex_strategy", "1"); // dual simplex
 
     // initialize RMP if empty
     cg_time.start();
-    if (pricer_farkas.optimize(ones, pricing, _reduced_costs) > -kHighsInf) {
+    if (farkas_pricer.optimize(ones, pricing, _reduced_costs) > -kHighsInf) {
         int from = rmp->getNumCol();
         int added = add_columns(_reduced_costs);
 
@@ -467,9 +342,9 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
 
         cg_time.start();
         if (has_dual_ray) {
-            pricer_farkas.update(rmp.get());
+            farkas_pricer.update(rmp.get());
 
-            if (pricer_farkas.optimize(solution.row_dual, pricing, _reduced_costs) > -kHighsInf) {
+            if (farkas_pricer.optimize(solution.row_dual, pricing, _reduced_costs) > -kHighsInf) {
                 //column_management.reduce(iteration_count);
                 int from = rmp->getNumCol();
                 int added = add_columns(_reduced_costs);
@@ -502,8 +377,6 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
         rmp->deleteCols(static_cast<int>(index.size()), index.data());
         rmp->deleteCols(static_cast<int>(index.size()), index.data());
         rmp->changeColsCost(0, costs.size() - 1, costs.data());
-
-        //rmp->setOptionValue("simplex_strategy", "4"); // primal simplex
         rmp->run();
         return rmp->getModelStatus() == HighsModelStatus::kOptimal;
     }
@@ -512,8 +385,8 @@ bool GapSolver<RmpSolver, FarkasType, PricerType>::restoreFeasibility(FarkasType
     }
 }
 
-template <typename RmpSolver, template<typename> class FarkasType, template<typename> class PricerType>
-void GapSolver<RmpSolver, FarkasType, PricerType>::updateCompactSolution() {
+template <typename RmpSolver>
+void GapSolver<RmpSolver>::updateCompactSolution() {
     const auto& solution = rmp->getSolution();
 
     if (solution.value_valid) {
@@ -522,7 +395,9 @@ void GapSolver<RmpSolver, FarkasType, PricerType>::updateCompactSolution() {
 
         // check for UB solution
         for (size_t idx = 0, size = rmp->getNumCol(); idx < size; ++idx) {
-            if (solution.col_value[idx] > 1e-6) {
+			double val = solution.col_value[idx];
+
+            if (val > 1e-6) {
                 ++basis_size;
 				const auto& col = get_column(*rmp.get(), idx);
 
@@ -530,7 +405,7 @@ void GapSolver<RmpSolver, FarkasType, PricerType>::updateCompactSolution() {
                 auto machine = *end - instance.jobs;
 
                 for (auto it = col.begin(); it != end; ++it) {
-                    _compact_solution[machine * instance.jobs + *it] += solution.col_value[idx];
+                    _compact_solution[machine * instance.jobs + *it] += val;
                 }
             }
         }
@@ -545,32 +420,28 @@ void GapSolver<RmpSolver, FarkasType, PricerType>::updateCompactSolution() {
         if (fractional_count == 0) {
             double tmpUB = 0;
             for (int m = 0; m < instance.machines; ++m) {
-                auto& costs = instance.costs[m];
+                const auto& costs = instance.costs[m];
+                const int offset = m * instance.jobs;
+
                 for (int j = 0; j < instance.jobs; ++j) {
-                    tmpUB += costs[j] * std::ceil(_compact_solution[m * instance.jobs + j] - 1e-6);
+                    tmpUB += costs[j] * std::ceil(_compact_solution[offset + j] - 1e-6);
                 }
             }
 
-            if (_UB > tmpUB) {
-                _UB = tmpUB;
-            }
+            _UB = std::min(_UB, tmpUB);
         }
 
         // if using cover (instead of partition), we might need to remove duplicate jobs
         if (basis_size == instance.machines) {
-            double tmpUB = remove_duplicates();
-
-            if (_UB > tmpUB) {
-                _UB = tmpUB;
-            }
+            _UB = std::min(_UB, remove_duplicates());
         }
     }
 }
 
 // we might have duplicate jobs since RMP uses cover (instead of partition)
 // if we have an integral solution we need to remove duplicates to get the correct UB
-template <typename RmpSolver, template<typename> class FarkasType, template<typename> class PricerType>
-double GapSolver<RmpSolver, FarkasType, PricerType>::remove_duplicates() {
+template <typename RmpSolver>
+double GapSolver<RmpSolver>::remove_duplicates() {
     const auto& solution = rmp->getSolution();
     const HighsInt* basis = rmp->getBasicVariablesArray();
     const HighsInt num_col = rmp->getNumCol();
@@ -668,8 +539,8 @@ double GapSolver<RmpSolver, FarkasType, PricerType>::remove_duplicates() {
     }
 }
 
-template <typename RmpSolver, template<typename> class FarkasType, template<typename> class PricerType>
-int GapSolver<RmpSolver, FarkasType, PricerType>::add_columns(std::vector<double>& reduced_costs) {
+template <typename RmpSolver>
+int GapSolver<RmpSolver>::add_columns(std::vector<double>& reduced_costs) {
     int count = 0;
 
     for (int m = 0; m < instance.machines; ++m) {
@@ -687,3 +558,55 @@ int GapSolver<RmpSolver, FarkasType, PricerType>::add_columns(std::vector<double
 
     return count;
 }
+
+template <typename RmpSolver>
+void AgeColumnManagement<RmpSolver>::reduce(uint32_t iteration_count) {
+    // "age" the columns, i.e., set the current basis to the current iteration
+    const auto& solution = _rmp->getSolution();
+    const HighsInt* basis = _rmp->getBasicVariablesArray();
+    const uint32_t num_col = _rmp->getNumCol();
+    uint32_t basis_size = 0;
+    _age.resize(num_col, iteration_count - 1);
+
+    for (uint32_t i = 0; i < _rmp->getNumRow(); ++i) {
+        uint32_t idx = basis[i];
+
+        // include all basis columns, even if they have zero value
+        // this helps reduce number of simplex pivots
+        if (idx < num_col) {
+            bool non_zero = solution.col_value[idx] > 1e-6;
+            _age[idx] = iteration_count + non_zero;
+            basis_size += non_zero;
+        }
+    }
+
+    // remove old columns if we've got too many, but only if we have made progress
+    const uint32_t MAX_COLS = _params->max_col_multiplier * _rmp->getNumRow();
+
+    if (num_col > MAX_COLS && iteration_count > _params->age_limit) {
+        const uint32_t age_limit = iteration_count - _params->age_limit;
+        std::vector<int> indices_to_remove;
+
+        for (uint32_t i = 0; i < num_col; ++i) {
+            if (_age[i] < age_limit) {
+                indices_to_remove.emplace_back(i);
+            }
+        }
+
+        // remove the columns from model and from _age, preserve correct index
+        delete_by_index(_age, indices_to_remove);
+
+        _rmp->deleteCols(static_cast<int>(indices_to_remove.size()), indices_to_remove.data());
+    }
+}
+
+// Only need to instantiate for each RmpSolver type.
+// Pricer/Farkas combinations are resolved via std::variant + std::visit.
+template class GapSolver<Highs>;
+
+#ifdef SUPPORT_GUROBI
+
+template class GapSolver<GurobiHighs>;
+
+#endif
+
