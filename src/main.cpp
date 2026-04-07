@@ -1,19 +1,15 @@
 #include <iostream>
-#include <iomanip>
 #include <algorithm>
 #include <filesystem>
 #include <sstream>
 #include <fstream>
-#include <regex>
-#include <locale>
+
 #include "parameters.h"
 #include "gap/gap.h"
 #include "quill/Backend.h"
-#include <ctime>
 #include "argparse/argparse.hpp"
 #include "taskflow/taskflow.hpp"
 #include "taskflow/algorithm/for_each.hpp"
-#include <optional>
 
 namespace fs = std::filesystem;
 bool has_completed(const std::string& log_filename);

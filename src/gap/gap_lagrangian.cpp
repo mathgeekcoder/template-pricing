@@ -1,6 +1,5 @@
 #include "gap_lagrangian.h"
 #include "gap_instance.h"
-#include "extern/scip/scip_knapsack.h"
 #include "gap_pricing.h"
 #include "utils.h"
 #include "taskflow/taskflow.hpp"

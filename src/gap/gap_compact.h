@@ -1,8 +1,6 @@
 #pragma once
 #include "gap_instance.h"
-#include <iomanip>
 #include "highs/Highs.h"
-#include <ctime>
 
 template <typename RmpSolver>
 struct GapCompact {

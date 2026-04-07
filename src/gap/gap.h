@@ -7,15 +7,12 @@
 #include "gap/gap_instance.h"
 #include "quill/CsvWriter.h"
 #include "quill/core/FrontendOptions.h"
-#include "extern/scip/scip_knapsack.h"
-#include "highs/parallel/HighsParallel.h"
 #include "highs/Highs.h"
 #include "pricers/dantzig.h"
 #include "pricers/wentges.h"
 #include "pricers/mip_template.h"
 #include "pricers/lagrange_template.h"
 #include "pricers/farkas.h"
-#include "taskflow/taskflow.hpp"
 #include "gap_lagrangian.h"
 #include <format>
 

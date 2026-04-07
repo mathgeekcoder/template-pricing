@@ -2,7 +2,6 @@
 #include <vector>
 #include "utils.h"
 #include "highs/Highs.h"
-#include "highs/parallel/HighsParallel.h"
 
 struct CsvSchema {
 	static constexpr char const* header = "instance,class,machines,jobs,algorithm,solver,farkas,replication,iterations,lb,ub,gap,obj,redcost,basis,cols,rmptime,cgtime,time,lpiters,lpiters_per_second,lpiters_per_column,has_integer,timeout,params,last";
