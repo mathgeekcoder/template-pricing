@@ -9,7 +9,7 @@
 #include "quill/core/FrontendOptions.h"
 #include "highs/Highs.h"
 #include "pricers/dantzig.h"
-#include "pricers/wentges.h"
+#include "pricers/pessoa.h"
 #include "pricers/mip_template.h"
 #include "pricers/lagrange_template.h"
 #include "pricers/farkas.h"
@@ -28,7 +28,7 @@ using FarkasVariant = std::variant<
 template <typename RmpSolver>
 using PricerVariant = std::variant<
     DantzigPrice<RmpSolver>,
-    WentgesPrice<RmpSolver>,
+    PessoaPrice<RmpSolver>,
     TemplatePrice<RmpSolver>,
     LagrangeTemplatePrice<RmpSolver>
 >;
@@ -184,7 +184,7 @@ PricerVariant<RmpSolver> make_pricer(const Parameters& params) {
     switch (params.pricing_method[0]) {
         case 'm': return TemplatePrice<RmpSolver>{};
         case 'l': return LagrangeTemplatePrice<RmpSolver>{};
-        case 'w': return WentgesPrice<RmpSolver>{};
+        case 'p': return PessoaPrice<RmpSolver>{};
         default:  return DantzigPrice<RmpSolver>{};
     }
 }

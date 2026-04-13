@@ -14,7 +14,7 @@ def normalize_algorithm_names(df: pl.DataFrame) -> pl.DataFrame:
     return df.with_columns([
         (pl.col("algorithm")
             .str.replace("Dantzig", "D")
-            .str.replace("Wentges", "P")
+            .str.replace("Pessoa", "P")
             .str.replace("LagrangeTemplate", "LT")
             .str.replace("MipTemplate", "MT")
             .str.replace("lr", "LR")

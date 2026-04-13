@@ -1,4 +1,4 @@
-#include "wentges.h"
+#include "pessoa.h"
 
 double norm(const std::vector<double>& a) {
 	double norm = 0;
@@ -17,7 +17,7 @@ double norm(const std::vector<double>& a, const std::vector<double>& b) {
 }
 
 template <typename RmpSolver>
-double WentgesPrice<RmpSolver>::optimize(const std::vector<double>& dual_out, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs) {
+double PessoaPrice<RmpSolver>::optimize(const std::vector<double>& dual_out, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs) {
     double optimal_pricing = dantzig.optimize(dual_out, pricing, reduced_costs);
 
     if (optimal_pricing < 1e-6)
@@ -159,10 +159,10 @@ double WentgesPrice<RmpSolver>::optimize(const std::vector<double>& dual_out, Pr
     return optimal_pricing;
 }
 
-template class WentgesPrice<Highs>;
+template class PessoaPrice<Highs>;
 
 #ifdef SUPPORT_GUROBI
 
-template class WentgesPrice<GurobiHighs>;
+template class PessoaPrice<GurobiHighs>;
 
 #endif

@@ -1,4 +1,4 @@
-// wentges logic adapted from:
+// pessoa logic adapted from:
 // 
 // A Pessoa, R Sadykov, E Uchoa, F Vanderbeck. https://inria.hal.science/hal-01077984v4/document
 // Automation and combination of linear - programming based stabilization techniques in column generation. 2014.
@@ -7,8 +7,8 @@
 #include "dantzig.h"
 
 template <typename RmpSolver>
-struct WentgesPrice {
-    static constexpr const char* name = "Wentges";
+struct PessoaPrice {
+    static constexpr const char* name = "Pessoa";
 
     RmpSolver* _rmp = nullptr;
     GapInstance* _instance = nullptr;

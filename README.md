@@ -87,7 +87,7 @@ Usage:
   Use set-partition RMP instead of set-cover.
 
 - `-m, --method METHOD`  
-  Pricer method. Choices: `mt`, `lt`, `w`, `d`, `mip`, `lr`.  
+  Pricer method. Choices: `mt`, `lt`, `p`, `d`, `mip`, `lr`.  
   Default: `lt`.
 
 - `-i, --init METHOD`  
@@ -185,7 +185,7 @@ python merge.py *.csv -x -o yagiura-init-setpartition.csv
 
 ```bash
 ./colgen_pricing instances/ISA/original -m d  --time_limit 21600 -r 5
-./colgen_pricing instances/ISA/original -m w  --time_limit 21600 -r 5
+./colgen_pricing instances/ISA/original -m p  --time_limit 21600 -r 5
 ./colgen_pricing instances/ISA/original -m lt --time_limit 21600 -r 5
 ./colgen_pricing instances/ISA/original -m mt --time_limit 21600 -r 5
 python merge.py *.csv -x -o yagiura-results.csv
@@ -208,10 +208,10 @@ python merge.py *.csv -x -o isa-init-setcover.csv
 #### Full column generation
 
 ```bash
-./colgen_pricing instances/ISA/new_types -m w  --time_limit 21600
+./colgen_pricing instances/ISA/new_types -m p  --time_limit 21600
 ./colgen_pricing instances/ISA/new_types -m lt --time_limit 21600
 ./colgen_pricing instances/ISA/new_types -m lr --time_limit 21600
-./colgen_pricing instances/ISA/extended  -m w  --time_limit 21600
+./colgen_pricing instances/ISA/extended  -m p  --time_limit 21600
 ./colgen_pricing instances/ISA/extended  -m lt --time_limit 21600
 ./colgen_pricing instances/ISA/extended  -m lr --time_limit 21600
 python merge.py *.csv -x -o isa-results.csv
