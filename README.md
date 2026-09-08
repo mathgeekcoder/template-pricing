@@ -168,26 +168,26 @@ python src/gap/statistics_isa.py
 #### Initialization only
 
 ```bash
-./colgen_pricing instances/ISA/original -m d  --farkas_only --time_limit 600 -r 5
-./colgen_pricing instances/ISA/original -m lt --farkas_only --time_limit 600 -r 5
-./colgen_pricing instances/ISA/original -m mt --farkas_only --time_limit 600 -r 5
+out/build/linux-release/colgen_pricing instances/ISA2023/original -m d  --farkas_only --time_limit 600 -r 5
+out/build/linux-release/colgen_pricing instances/ISA2023/original -m lt --farkas_only --time_limit 600 -r 5
+out/build/linux-release/colgen_pricing instances/ISA2023/original -m mt --farkas_only --time_limit 600 -r 5
 python merge.py *.csv -x -o yagiura-init-setcover.csv
 ```
 
 ```bash
-./colgen_pricing instances/ISA/original -m d  --farkas_only --set_partition --time_limit 600 -r 5
-./colgen_pricing instances/ISA/original -m lt --farkas_only --set_partition --time_limit 600 -r 5
-./colgen_pricing instances/ISA/original -m mt --farkas_only --set_partition --time_limit 600 -r 5
+out/build/linux-release/colgen_pricing instances/ISA2023/original -m d  --farkas_only --set_partition --time_limit 600 -r 5
+out/build/linux-release/colgen_pricing instances/ISA2023/original -m lt --farkas_only --set_partition --time_limit 600 -r 5
+out/build/linux-release/colgen_pricing instances/ISA2023/original -m mt --farkas_only --set_partition --time_limit 600 -r 5
 python merge.py *.csv -x -o yagiura-init-setpartition.csv
 ```
 
 #### Full column generation
 
 ```bash
-./colgen_pricing instances/ISA/original -m d  --time_limit 21600 -r 5
-./colgen_pricing instances/ISA/original -m p  --time_limit 21600 -r 5
-./colgen_pricing instances/ISA/original -m lt --time_limit 21600 -r 5
-./colgen_pricing instances/ISA/original -m mt --time_limit 21600 -r 5
+out/build/linux-release/colgen_pricing instances/ISA2023/original -m d  --time_limit 21600 -r 5
+out/build/linux-release/colgen_pricing instances/ISA2023/original -m p  --time_limit 21600 -r 5
+out/build/linux-release/colgen_pricing instances/ISA2023/original -m lt --time_limit 21600 -r 5
+out/build/linux-release/colgen_pricing instances/ISA2023/original -m mt --time_limit 21600 -r 5
 python merge.py *.csv -x -o yagiura-results.csv
 ```
 
@@ -196,24 +196,24 @@ python merge.py *.csv -x -o yagiura-results.csv
 #### Initialization only
 
 ```bash
-./colgen_pricing instances/ISA/new_types -m d  --farkas_only --time_limit 600
-./colgen_pricing instances/ISA/new_types -m lt --farkas_only --time_limit 600
-./colgen_pricing instances/ISA/new_types -m mt --farkas_only --time_limit 600
-./colgen_pricing instances/ISA/extended  -m d  --farkas_only --time_limit 600
-./colgen_pricing instances/ISA/extended  -m lt --farkas_only --time_limit 600
-./colgen_pricing instances/ISA/extended  -m mt --farkas_only --time_limit 600
+out/build/linux-release/colgen_pricing instances/ISA2023/new_types -m d  --farkas_only --time_limit 600
+out/build/linux-release/colgen_pricing instances/ISA2023/new_types -m lt --farkas_only --time_limit 600
+out/build/linux-release/colgen_pricing instances/ISA2023/new_types -m mt --farkas_only --time_limit 600
+out/build/linux-release/colgen_pricing instances/ISA2023/extended  -m d  --farkas_only --time_limit 600
+out/build/linux-release/colgen_pricing instances/ISA2023/extended  -m lt --farkas_only --time_limit 600
+out/build/linux-release/colgen_pricing instances/ISA2023/extended  -m mt --farkas_only --time_limit 600
 python merge.py *.csv -x -o isa-init-setcover.csv
 ```
 
 #### Full column generation
 
 ```bash
-./colgen_pricing instances/ISA/new_types -m p  --time_limit 21600
-./colgen_pricing instances/ISA/new_types -m lt --time_limit 21600
-./colgen_pricing instances/ISA/new_types -m lr --time_limit 21600
-./colgen_pricing instances/ISA/extended  -m p  --time_limit 21600
-./colgen_pricing instances/ISA/extended  -m lt --time_limit 21600
-./colgen_pricing instances/ISA/extended  -m lr --time_limit 21600
+out/build/linux-release/colgen_pricing instances/ISA2023/new_types -m p  --time_limit 21600
+out/build/linux-release/colgen_pricing instances/ISA2023/new_types -m lt --time_limit 21600
+out/build/linux-release/colgen_pricing instances/ISA2023/new_types -m lr --time_limit 21600
+out/build/linux-release/colgen_pricing instances/ISA2023/extended  -m p  --time_limit 21600
+out/build/linux-release/colgen_pricing instances/ISA2023/extended  -m lt --time_limit 21600
+out/build/linux-release/colgen_pricing instances/ISA2023/extended  -m lr --time_limit 21600
 python merge.py *.csv -x -o isa-results.csv
 ```
 
