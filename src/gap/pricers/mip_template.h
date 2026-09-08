@@ -26,9 +26,6 @@ struct TemplatePrice {
     TemplatePricing _template;
     std::unique_ptr<PricingBlockVector<GapPricingMIP<RmpSolver>>> _mip;
 
-    TemplatePrice() = default;
-    TemplatePrice(const TemplatePrice& copy);
-
     void init(tf::Executor* executor, RmpSolver* rmp, GapInstance* instance);
     double optimize(const std::vector<double>& duals, PricingBlockVector<GapPricing>& pricing, std::vector<double>& reduced_costs);
 

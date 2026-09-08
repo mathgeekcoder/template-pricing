@@ -100,7 +100,7 @@ struct GapSolver {
     const char* _farkas_name;
 
 	GapSolver(std::string filename, const Parameters& params, quill::CsvWriter<CsvSchema, quill::FrontendOptions>& csv_writer,
-              FarkasVariant<RmpSolver> farkas, PricerVariant<RmpSolver> pricer)
+              FarkasVariant<RmpSolver>&& farkas, PricerVariant<RmpSolver>&& pricer)
 		: instance(filename), params(params), csv_writer(csv_writer), pricing(instance.machines), lp(instance), _executor(params.num_threads), _farkas(std::move(farkas)), _pricer(std::move(pricer))
     {
         _farkas_name = std::visit([](const auto& f) { return f.name; }, _farkas);

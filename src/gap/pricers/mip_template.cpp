@@ -99,16 +99,6 @@ double GapPricingMIP<RmpSolver>::optimize_template(const std::vector<double>& te
     return tmp;
 }
 
-
-template <typename RmpSolver>
-TemplatePrice<RmpSolver>::TemplatePrice(const TemplatePrice& copy) {
-    _rmp = copy._rmp;
-    _instance = copy._instance;
-    _template = copy._template;
-    _mip = std::make_unique<PricingBlockVector<GapPricingMIP<RmpSolver>>>(copy._instance->machines);
-    _mip->init(*_instance);
-}
-
 template <typename RmpSolver>
 void TemplatePrice<RmpSolver>::init(tf::Executor* executor, RmpSolver* rmp, GapInstance* instance) {
     _rmp = rmp;
